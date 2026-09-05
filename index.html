@@ -2,8 +2,8 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Rotalis — Gelişmiş Rota Optimizasyonu &amp; Gezi Planlama</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Rotasyon — Gelişmiş Rota Optimizasyonu &amp; Gezi Planlama</title>
 <meta name="theme-color" content="#080b10">
 
 <!-- Leaflet CSS -->
@@ -42,7 +42,7 @@
 
 <style>
 /* =========================================================
-   Rotalis — Gelişmiş Rota Optimizasyon Uygulaması
+   Rotasyon — Gelişmiş Rota Optimizasyon Uygulaması
    Stil Dosyası
    ========================================================= */
 
@@ -55,6 +55,15 @@
 html, body {
   background: #060809;
   scrollbar-gutter: stable;
+  height: 100%;
+}
+
+/* Mobil tarayıcılarda adres çubuğunun açılıp kapanmasıyla 100vh zıplamasını
+   önlemek için, destekleyen tarayıcılarda dinamik viewport birimini kullan. */
+@supports (height: 100dvh) {
+  html, body, #app {
+    height: 100dvh;
+  }
 }
 
 /* Zemin dokusu: hafif noktalı grid + vinyet */
@@ -94,7 +103,6 @@ body::before {
   backdrop-filter: blur(6px);
 }
 .leaflet-control-attribution a { color: #94a3b8 !important; }
-.leaflet-control-zoom { display: none; } /* özel FAB kullanıyoruz, zoom yine tekerlek/pinch ile çalışır */
 .leaflet-popup-content-wrapper {
   background: #0f151c;
   color: #e2e8f0;
@@ -113,6 +121,17 @@ body::before {
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   border: 1px solid rgba(148, 176, 199, 0.14);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255,255,255,0.03);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+/* Açık zeminli harita temaları (Standart / Topoğrafik) aktifken, arkadan sızan
+   açık renkli tile'lar glassmorphic panellerin kontrastını düşürüyordu.
+   body üzerindeki .map-theme-light sınıfı ile panel/menü arkaplanını
+   belirgin biçimde daha opak ve koyu yaparak yazıların her zaman okunur
+   kalmasını sağlıyoruz. */
+body.map-theme-light .glass-card {
+  background: rgba(9, 13, 18, 0.92);
+  border-color: rgba(148, 176, 199, 0.22);
 }
 
 .glass-inset {
@@ -147,13 +166,38 @@ body::before {
     bottom: 0;
     top: auto;
     height: 78vh;
+    max-height: 78vh;
     border-radius: 24px 24px 0 0;
     transform: translateY(100%);
     transition: transform 0.42s var(--ease-out-expo);
+    /* Alt çentikli (home indicator) telefonlarda panel içeriğinin ve alt
+       butonun cihaz kenarına yapışmaması için güvenli alan payı */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .panel-shell.open { transform: translateY(0); }
   #drawer-handle { transition: opacity 0.25s ease, transform 0.25s ease; }
   #drawer-handle.hidden-handle { opacity: 0; transform: translate(-50%, 40px); pointer-events: none; }
+
+  /* Dikey (portrait) mobil: harita üstü kontrolleri drawer tutamacı ve
+     çentik/durum çubuğu ile çakışmayacak şekilde konumlandır */
+  #layer-switcher {
+    top: calc(env(safe-area-inset-top, 0px) + 12px);
+    right: 12px;
+  }
+  #map-fab, #zoom-fab {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
+  }
+  #map-fab { right: 12px; }
+  #zoom-fab { left: 12px; }
+  #drawer-handle {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  }
+}
+
+/* Kısa/yatay mobil ekranlarda (yükseklik dar) drawer'ın çok yer kaplamasını önle */
+@media (max-width: 1023px) and (max-height: 480px) {
+  .panel-shell { height: 88vh; max-height: 88vh; }
+  #map-fab, #zoom-fab { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
 }
 
 @media (min-width: 1024px) {
@@ -256,6 +300,19 @@ body::before {
 .fab-btn:hover { transform: translateY(-2px); color: #3ddc97; background: rgba(13,18,24,0.9); }
 .fab-btn:active { transform: translateY(0); }
 
+/* ================= ZOOM FAB ================= */
+.zoom-btn {
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  color: #e2e8f0;
+  font-size: 15px;
+  border-radius: 13px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.zoom-btn:hover { color: #3ddc97; background: rgba(255,255,255,0.06); }
+.zoom-btn:active { transform: scale(0.94); }
+.zoom-btn-divider { height: 1px; margin: 0 6px; background: rgba(148,176,199,0.16); }
+
 .layer-btn {
   width: 38px; height: 38px;
   border-radius: 12px;
@@ -266,6 +323,8 @@ body::before {
 }
 .layer-btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.06); }
 .layer-btn.active { color: #06120c; background: #3ddc97; }
+/* Açık harita temalarında pasif katman ikonlarının kontrastını artır */
+body.map-theme-light .layer-btn:not(.active) { color: #cbd5e1; }
 
 /* ================= SUGGESTION BOX ================= */
 .suggestion-box {
@@ -401,6 +460,24 @@ body::before {
   color: #e2e8f0;
 }
 
+/* ================= FUEL TYPE TOGGLE ================= */
+.fuel-type-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(148,176,199,0.14);
+  border-radius: 12px;
+  padding: 10px 4px;
+  font-size: 10.5px;
+  color: #94a3b8;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.fuel-type-btn i { font-size: 16px; }
+.fuel-type-btn.active {
+  border-color: rgba(61,220,151,0.5);
+  background: rgba(61,220,151,0.08);
+  color: #e2e8f0;
+}
+
 /* ================= SKELETON LOADER ================= */
 .skeleton-chart {
   height: 140px;
@@ -443,6 +520,27 @@ body::before {
   background: #3ddc97;
   border: 3px solid #0a120e;
   box-shadow: 0 0 0 3px rgba(61,220,151,0.35), 0 2px 10px rgba(0,0,0,0.5);
+}
+
+/* Harita FAB'ı ile bulunan kullanıcı konumu için nabız gösterge */
+.user-location-dot {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #5b8def;
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 4px rgba(91,141,239,0.3), 0 2px 10px rgba(0,0,0,0.5);
+  position: relative;
+}
+.user-location-dot::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: rgba(91,141,239,0.25);
+  animation: user-location-pulse 1.8s ease-out infinite;
+}
+@keyframes user-location-pulse {
+  0% { transform: scale(0.5); opacity: 0.9; }
+  100% { transform: scale(1.8); opacity: 0; }
 }
 
 /* Haritada, çoklu duraklı rotalarda her bacağın (leg) orta noktasına konan
@@ -579,6 +677,13 @@ button:focus-visible, input:focus-visible, select:focus-visible {
     <button id="btn-share" class="fab-btn" title="Rotayı Paylaş"><i class="fa-solid fa-share-nodes"></i></button>
   </div>
 
+  <!-- Harita üstü sol alt: özel yakınlaştır/uzaklaştır butonları -->
+  <div id="zoom-fab" class="absolute bottom-6 left-4 z-[500] glass-card rounded-2xl p-1 flex flex-col">
+    <button id="btn-zoom-in" class="zoom-btn" title="Yakınlaştır"><i class="fa-solid fa-plus"></i></button>
+    <div class="zoom-btn-divider"></div>
+    <button id="btn-zoom-out" class="zoom-btn" title="Uzaklaştır"><i class="fa-solid fa-minus"></i></button>
+  </div>
+
   <!-- Durak tip context-menu (JS ile konumlandırılır) -->
   <div id="stop-context-menu" class="glass-card rounded-xl p-1.5 hidden flex-col gap-0.5 z-[1000] absolute">
     <button data-role="start" class="ctx-menu-item"><i class="fa-solid fa-flag-checkered text-accent"></i> Başlangıç Yap</button>
@@ -604,7 +709,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
           <i class="fa-solid fa-route text-ink text-sm"></i>
         </div>
         <div>
-          <h1 class="font-display font-bold text-[15px] leading-tight text-white">Rotalis</h1>
+          <h1 class="font-display font-bold text-[15px] leading-tight text-white">Rotasyon</h1>
           <p class="text-[11px] text-slate-400 leading-tight">Rota Optimizasyonu &amp; Gezi Planlama</p>
         </div>
       </div>
@@ -681,8 +786,24 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
       <!-- YAKIT VE MALİYET HESAPLAYICI -->
       <section id="fuel-section" class="hidden">
-        <label class="field-label">Yakıt &amp; Maliyet Hesaplayıcı</label>
+        <div class="flex items-center justify-between mb-2">
+          <label class="field-label mb-0">Yakıt &amp; Maliyet Hesaplayıcı</label>
+        </div>
         <div class="glass-inset rounded-xl p-3.5 space-y-3">
+
+          <!-- Yakıt türü seçici -->
+          <div class="grid grid-cols-3 gap-2">
+            <button data-fuel-type="benzin" class="fuel-type-btn active">
+              <i class="fa-solid fa-gas-pump"></i><span>Benzin</span>
+            </button>
+            <button data-fuel-type="motorin" class="fuel-type-btn">
+              <i class="fa-solid fa-truck-fast"></i><span>Motorin</span>
+            </button>
+            <button data-fuel-type="lpg" class="fuel-type-btn">
+              <i class="fa-solid fa-fire-flame-simple"></i><span>LPG</span>
+            </button>
+          </div>
+
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label id="label-consumption" class="text-[11px] text-slate-400 block mb-1">Ort. Tüketim (L/100km)</label>
@@ -700,6 +821,13 @@ button:focus-visible, input:focus-visible, select:focus-visible {
               </div>
             </div>
           </div>
+
+          <!-- Ortalama fiyatı otomatik doldur -->
+          <button id="btn-fetch-avg-price" class="btn-secondary text-xs w-full">
+            <i class="fa-solid fa-rotate"></i> <span id="btn-fetch-avg-price-label">Türkiye Ortalamasını Getir</span>
+          </button>
+          <p id="fuel-price-source-note" class="text-[10px] text-slate-500 leading-relaxed"></p>
+
           <div class="flex items-center justify-between pt-2 border-t border-border/60">
             <div class="text-center flex-1">
               <div class="text-lg font-display font-bold text-white"><span id="fuel-liters">0</span> L</div>
@@ -748,12 +876,6 @@ button:focus-visible, input:focus-visible, select:focus-visible {
       <section id="poi-section" class="hidden">
         <label class="field-label">Rota Üzeri Tesisler (POI)</label>
         <div class="glass-inset rounded-xl p-3.5 space-y-3">
-          <div class="flex items-center justify-between text-[12px]">
-            <span class="text-slate-300">Tampon Mesafesi</span>
-            <span id="buffer-value" class="font-display font-semibold text-accent">500 m</span>
-          </div>
-          <input id="buffer-slider" type="range" min="250" max="2000" step="50" value="500" class="range-slider">
-
           <div class="grid grid-cols-3 gap-2 pt-1">
             <button data-poi="fuel" class="poi-toggle" data-active="false">
               <i class="fa-solid fa-gas-pump text-warn"></i><span>Benzinlik</span>
@@ -793,7 +915,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script type="module">
 /* =========================================================
-   Rotalis — Gelişmiş Rota Optimizasyon Uygulaması
+   Rotasyon — Gelişmiş Rota Optimizasyon Uygulaması
    app.js — Tamamen istemci taraflı, sunucusuz uygulama mantığı
    ========================================================= */
 
@@ -889,7 +1011,6 @@ const state = {
   elevationPoints: [], // [{lat, lng, elevation, distanceAlongRoute}]
   poiMarkers: { fuel: [], hotel: [], restaurant: [] },
   activePoiTypes: new Set(),
-  bufferMeters: 500,
   currentBaseLayer: 'dark',
   unitSystem: 'metric',       // 'metric' | 'imperial'
   routeAlternatives: [],       // OSRM'den dönen tüm rota seçenekleri
@@ -1036,7 +1157,8 @@ function initMap() {
   poiLayerGroup = L.layerGroup().addTo(map);
   legLabelsLayer = L.layerGroup().addTo(map);
 
-  L.control.zoom({ position: 'bottomleft' }).addTo(map);
+  document.getElementById('btn-zoom-in').addEventListener('click', () => map.zoomIn());
+  document.getElementById('btn-zoom-out').addEventListener('click', () => map.zoomOut());
 
   map.on('click', onMapClick);
 
@@ -1052,6 +1174,9 @@ function switchBaseLayer(key, btnEl) {
   state.currentBaseLayer = key;
   document.querySelectorAll('.layer-btn').forEach((b) => b.classList.remove('active'));
   btnEl.classList.add('active');
+  // Standart (osm) ve Topoğrafik (topo) katmanlar açık renkli zemine sahip;
+  // panel/menü kontrastını korumak için body'ye tema sınıfı ekleyip çıkarıyoruz.
+  document.body.classList.toggle('map-theme-light', key !== 'dark');
 }
 
 /* ============================================================
@@ -1329,7 +1454,10 @@ let suggestionActiveIndex = -1;
 
 function renderSuggestions(features, source = 'photon') {
   suggestionFeatures = features;
-  suggestionActiveIndex = -1;
+  // Liste dolduğunda en üstteki öneri varsayılan olarak aktif kabul edilir;
+  // böylece kullanıcı ok tuşlarına hiç dokunmadan doğrudan Enter'a basınca
+  // ilk sonuç otomatik seçilir.
+  suggestionActiveIndex = features.length ? 0 : -1;
 
   if (!features.length) {
     suggestionsBox.innerHTML = `<div class="suggestion-empty"><i class="fa-solid fa-circle-question"></i> Sonuç bulunamadı.</div>`;
@@ -1363,6 +1491,9 @@ function renderSuggestions(features, source = 'photon') {
     });
     suggestionsBox.appendChild(item);
   });
+
+  // İlk sonucu görsel olarak da vurgula (Enter ile doğrudan seçilebileceğini belli eder)
+  updateActiveSuggestion(Array.from(suggestionsBox.querySelectorAll('.suggestion-item')));
 }
 
 /** Ok tuşlarıyla önerilerde gezinme + Enter ile seçme (klavye erişilebilirliği) */
@@ -1411,29 +1542,68 @@ async function handleSuggestionPick(lat, lng, title, sub) {
   await addStopDirect(lat, lng, title, sub);
 }
 
-/* GPS ile anlık konum */
+/* GPS ile anlık konum: arama kutusundaki "başlangıç yap" ikonu -> konumu durak olarak ekler */
 document.getElementById('btn-gps').addEventListener('click', () => {
+  runGeolocation((latitude, longitude) => addStopDirect(latitude, longitude, 'Anlık Konumum', '', true));
+});
+
+/* Harita üstü "Konumumu Bul" FAB: sadece haritayı kullanıcının konumuna götürür, durak eklemez */
+document.getElementById('btn-locate').addEventListener('click', () => {
+  runGeolocation((latitude, longitude) => {
+    map.flyTo([latitude, longitude], 15, { duration: 1.1 });
+    showUserLocationMarker(latitude, longitude);
+  });
+});
+
+let userLocationMarker = null;
+function showUserLocationMarker(lat, lng) {
+  const icon = L.divIcon({
+    className: '',
+    html: `<div class="user-location-dot"></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  });
+  if (userLocationMarker) {
+    userLocationMarker.setLatLng([lat, lng]);
+  } else {
+    userLocationMarker = L.marker([lat, lng], { icon, interactive: false, zIndexOffset: 900 }).addTo(map);
+  }
+}
+
+/**
+ * Ortak geolocation akışı: tarayıcı desteği, HTTPS/güvenli bağlam ve izin durumlarına
+ * göre anlaşılır Türkçe hata mesajları üretir, başarılı sonucu callback'e iletir.
+ */
+function runGeolocation(onSuccess) {
   if (!navigator.geolocation) {
-    toast('Tarayıcınız konum servisini desteklemiyor.', 'error');
+    toast('Tarayıcınız konum servisini desteklemiyor.', 'error', 'Konum Hatası');
+    return;
+  }
+  // Konum API'si güvenli bağlam (HTTPS veya localhost) dışında genelde sessizce
+  // reddedilir; kullanıcıya bunun sebebini açıkça belirtelim.
+  if (!window.isSecureContext) {
+    toast('Konum servisi yalnızca güvenli (HTTPS) bağlantılarda çalışır. Lütfen siteye https:// üzerinden erişin.', 'error', 'Konum Hatası');
     return;
   }
   toast('Konumunuz alınıyor…', 'info');
   navigator.geolocation.getCurrentPosition(
-    async (pos) => {
-      const { latitude, longitude } = pos.coords;
-      map.flyTo([latitude, longitude], 14, { duration: 1.1 });
-      await addStopDirect(latitude, longitude, 'Anlık Konumum', '', true);
+    (pos) => {
+      onSuccess(pos.coords.latitude, pos.coords.longitude);
     },
     (err) => {
-      toast('Konum alınamadı: ' + (err.message || 'izin reddedildi.'), 'error', 'GPS Hatası');
+      let msg = err.message || 'Konum alınamadı.';
+      if (err.code === err.PERMISSION_DENIED) {
+        msg = 'Konum izni reddedildi. Tarayıcı/site ayarlarından konum iznini açıp tekrar deneyin.';
+      } else if (err.code === err.POSITION_UNAVAILABLE) {
+        msg = 'Konum bilgisi alınamadı. Cihazınızın konum servislerinin açık olduğundan emin olun.';
+      } else if (err.code === err.TIMEOUT) {
+        msg = 'Konum isteği zaman aşımına uğradı. Lütfen tekrar deneyin.';
+      }
+      toast(msg, 'error', 'Konum Hatası');
     },
-    { enableHighAccuracy: true, timeout: 10000 }
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
   );
-});
-
-document.getElementById('btn-locate').addEventListener('click', () => {
-  document.getElementById('btn-gps').click();
-});
+}
 
 /* ============================================================
    7. HARİTA TIKLAMA DOĞRULAMASI (Su Tespiti & Snap-to-Road)
@@ -1449,17 +1619,29 @@ async function onMapClick(e) {
   });
 
   try {
-    // a) Nominatim Reverse Geocoding ile su yüzeyi kontrolü
-    const isWater = await checkIsWater(lat, lng);
-    Swal.close();
+    // a) Nominatim Reverse Geocoding ile su yüzeyi kontrolü (hızlı ama denizin
+    // açığında genelde en yakın kıyı yerleşimini döndürdüğü için tek başına
+    // güvenilir değildir — bkz. (b) asıl belirleyici kontrol).
+    const isWaterByGeocode = await checkIsWater(lat, lng);
 
-    if (isWater) {
-      toast('Deniz/Su yüzeyi seçilemez! Lütfen kara parçası üzerinde bir nokta seçin.', 'error', 'Geçersiz Konum');
+    if (isWaterByGeocode) {
+      Swal.close();
+      toast('Deniz/Göl/Su yüzeyi seçilemez. Lütfen kara parçası üzerinde bir nokta seçin.', 'error', 'Geçersiz Konum');
       return;
     }
 
-    // b) OSRM nearest ile en yakın karayoluna snap
+    // b) OSRM nearest ile en yakın karayoluna snap + o yola olan gerçek mesafe.
+    // Tıklanan nokta hiçbir karayoluna makul mesafede değilse (deniz ortası, geniş
+    // göl, ıssız arazi vb.) snap uygulamak yanlış bir noktaya ("en yakın yol"a)
+    // durak eklenmesine yol açar; bunun yerine kullanıcıyı bilgilendiriyoruz.
     const snapped = await snapToRoad(lat, lng);
+    Swal.close();
+
+    if (snapped.distanceToRoad > MAX_SNAP_DISTANCE_M) {
+      toast('Bu nokta bir karayoluna yakın değil (deniz, göl veya boş arazi olabilir). Lütfen kara parçası üzerinde, yola yakın bir nokta seçin.', 'error', 'Geçersiz Konum');
+      return;
+    }
+
     await addStopDirect(snapped.lat, snapped.lng, snapped.name || 'Durak', '', false);
   } catch (err) {
     Swal.close();
@@ -1499,11 +1681,24 @@ async function snapToRoad(lat, lng) {
 
   if (data.code !== 'Ok' || !data.waypoints?.length) {
     // Snap başarısızsa orijinal koordinatı kullan
-    return { lat, lng, name: 'Durak' };
+    return { lat, lng, name: 'Durak', distanceToRoad: Infinity };
   }
   const wp = data.waypoints[0];
-  return { lat: wp.location[1], lng: wp.location[0], name: wp.name || 'Durak' };
+  const snappedLat = wp.location[1];
+  const snappedLng = wp.location[0];
+  // OSRM zaten yol üzerindeki en yakın noktayı ve o noktaya olan mesafeyi (metre)
+  // döndürür (wp.distance). Bu mesafe çok büyükse (deniz ortası, göl, dağ başı vb.)
+  // tıklanan yerin karayoluna gerçekten yakın olmadığı, dolayısıyla muhtemelen
+  // bir su/boş alan üzerine tıklandığı anlaşılır.
+  const distanceToRoad = typeof wp.distance === 'number'
+    ? wp.distance
+    : haversineMeters(lat, lng, snappedLat, snappedLng);
+  return { lat: snappedLat, lng: snappedLng, name: wp.name || 'Durak', distanceToRoad };
 }
+
+// Tıklanan nokta ile OSRM'in bulduğu en yakın karayolu arasındaki mesafe bu değeri
+// aşarsa, snap uygulanmaz ve kullanıcıdan kara parçası üzerinde bir nokta seçmesi istenir.
+const MAX_SNAP_DISTANCE_M = 3000;
 
 /* ============================================================
    8. DURAK YÖNETİMİ (Ekle / Sil / Sırala / Render)
@@ -2046,9 +2241,73 @@ const inputFuelPrice = document.getElementById('input-fuel-price');
 const inputCurrency = document.getElementById('input-currency');
 const fuelLitersEl = document.getElementById('fuel-liters');
 const fuelCostEl = document.getElementById('fuel-cost');
+const btnFetchAvgPrice = document.getElementById('btn-fetch-avg-price');
+const btnFetchAvgPriceLabel = document.getElementById('btn-fetch-avg-price-label');
+const fuelPriceSourceNote = document.getElementById('fuel-price-source-note');
+
+/**
+ * Yakıt türüne göre Türkiye ortalaması referans değerleri.
+ *
+ * ÖNEMLİ NOT: Türkiye'de akaryakıt fiyatları için ücretsiz, anahtarsız ve
+ * tarayıcıdan (CORS) doğrudan çağrılabilen resmi/canlı bir API bulunmuyor
+ * (EPDK gibi kurumlar canlı bir API yayınlamıyor, çoğu üçüncü parti servis
+ * ücretli anahtar istiyor). Bu yüzden "otomatik çek" butonu, gerçek zamanlı
+ * bir sunucudan veri çekmek yerine, burada tanımlı ve elle güncellenebilen
+ * referans ortalamalarını forma yazar. Değerler tahminidir; kesin fiyat için
+ * güncel bir kaynağı kontrol edin.
+ *
+ * REFERENCE_PRICES_UPDATED_AT değerini güncellediğinizde price alanlarını da
+ * güncel Türkiye ortalamasıyla değiştirin.
+ */
+const REFERENCE_PRICES_UPDATED_AT = '2026-01'; // YYYY-AA — referans fiyatların ait olduğu dönem
+const FUEL_TYPES = {
+  benzin: { label: 'Benzin', icon: 'fa-gas-pump', avgPrice: 52.5, defaultConsumption: 7.5 },
+  motorin: { label: 'Motorin', icon: 'fa-truck-fast', avgPrice: 50.5, defaultConsumption: 6.5 },
+  lpg: { label: 'LPG', icon: 'fa-fire-flame-simple', avgPrice: 27.5, defaultConsumption: 9.0 },
+};
+let currentFuelType = 'benzin';
+
+document.querySelectorAll('.fuel-type-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    currentFuelType = btn.dataset.fuelType;
+    document.querySelectorAll('.fuel-type-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    // Tür değişince, henüz kullanıcı tarafından elle değiştirilmemiş gibi
+    // davranıp o türün varsayılan tüketimini öneriyoruz; fiyatı olduğu gibi
+    // bırakıyoruz ki kullanıcı "Türkiye Ortalamasını Getir" ile bilinçli
+    // şekilde güncellesin.
+    if (state.unitSystem !== 'imperial') {
+      inputConsumption.value = FUEL_TYPES[currentFuelType].defaultConsumption;
+    }
+    updateFuelCalculation();
+    saveSessionToStorage();
+  });
+});
 
 [inputConsumption, inputFuelPrice, inputCurrency].forEach((el) => {
   el.addEventListener('input', updateFuelCalculation);
+});
+
+/** "Türkiye Ortalamasını Getir" — bkz. yukarıdaki not: canlı bir API yerine
+ * güncel tutulan referans ortalama değerini forma yazar. */
+btnFetchAvgPrice.addEventListener('click', () => {
+  const original = btnFetchAvgPriceLabel.textContent;
+  btnFetchAvgPrice.disabled = true;
+  btnFetchAvgPriceLabel.textContent = 'Getiriliyor…';
+
+  // Gerçek bir ağ isteği yok (bkz. not); kısa bir gecikme sadece "işlem yapılıyor"
+  // hissini vermek ve ani değer değişimini kullanıcıya fark ettirmek için.
+  setTimeout(() => {
+    if (inputCurrency.value === '₺') {
+      inputFuelPrice.value = FUEL_TYPES[currentFuelType].avgPrice;
+      updateFuelCalculation();
+      toast(`${FUEL_TYPES[currentFuelType].label} için Türkiye ortalaması dolduruldu.`, 'success');
+    } else {
+      toast('Ortalama fiyat şu an yalnızca ₺ (TL) cinsinden mevcut. Lütfen para birimini ₺ yapın.', 'info');
+    }
+    btnFetchAvgPrice.disabled = false;
+    btnFetchAvgPriceLabel.textContent = original;
+  }, 450);
 });
 
 function updateFuelCalculation() {
@@ -2088,6 +2347,12 @@ function updateFuelFormLabels() {
     consumptionLabel.textContent = 'Ort. Tüketim (L/100km)';
     priceLabel.textContent = 'Litre Fiyatı';
     if (literUnitEl) literUnitEl.textContent = 'Tahmini Yakıt';
+  }
+
+  if (fuelPriceSourceNote) {
+    fuelPriceSourceNote.textContent = state.unitSystem === 'imperial'
+      ? ''
+      : `Ortalama fiyatlar ${REFERENCE_PRICES_UPDATED_AT} dönemine ait referans değerlerdir, tahminidir; güncel fiyat için bayi/istasyon kontrol edin.`;
   }
 }
 
@@ -2386,8 +2651,6 @@ function syncMapCursorToChart(point) {
 /* ============================================================
    12. DİNAMİK POI FİLTRELEME (Overpass API)
    ============================================================ */
-const bufferSlider = document.getElementById('buffer-slider');
-const bufferValueEl = document.getElementById('buffer-value');
 const poiResultHint = document.getElementById('poi-result-hint');
 
 const POI_TAG_MAP = {
@@ -2397,10 +2660,11 @@ const POI_TAG_MAP = {
 };
 const POI_LABELS = { fuel: 'Benzinlik', hotel: 'Otel', restaurant: 'Restoran' };
 
-bufferSlider.addEventListener('input', () => {
-  state.bufferMeters = parseInt(bufferSlider.value, 10);
-  bufferValueEl.textContent = `${state.bufferMeters} m`;
-});
+// Tesisler artık sabit bir "tampon" ayarı yerine, doğrudan rota hattının kendisine
+// (Overpass'ın "around" operatörü ile) göre aranıyor: yol üzerinde/yol kenarında olan
+// tesisler bulunur. 80m, bir yolun kenarındaki bina/tesisi kapsayacak kadar dar ama
+// paralel bir sokaktaki alakasız sonuçları da büyük ölçüde eleyecek kadar sıkı bir değer.
+const ROUTE_POI_RADIUS_M = 80;
 
 document.querySelectorAll('.poi-toggle').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -2424,54 +2688,28 @@ function clearPoiLayer(type) {
 }
 
 /**
- * Rotanın bounding box'ını bufferM kadar genişletip TEK bir Overpass sorgusu kurar.
- * Bu, önceki "her 40 noktadan bir around sorgusu" yaklaşımına göre çok daha hafiftir:
- * uzun rotalarda (500km+) onlarca ayrı sorgu yerine tek bir bbox sorgusu gönderilir.
- * Mesafe hassasiyeti (rota hattına gerçek uzaklık), sonuçlar döndükten sonra
- * client-side haversine ile filtrelenerek korunur (bkz. filterPOIsWithinBuffer).
+ * Rota hattının kendisini Overpass'ın "around" operatörüne besleyerek, gerçekten
+ * yol üzerinde/yol kenarında kalan tesisleri bulan sorgu kurar. Bir bbox yerine
+ * doğrudan hat mesafesi kullanıldığı için "tampon" ayarına gerek kalmaz ve
+ * rotadan uzak (ör. paralel bir sokaktaki veya şehrin öbür ucundaki) sonuçlar
+ * sorgu aşamasında zaten elenir.
+ *
+ * Overpass'ın "around" sözdizimi: (around:RADIUS,lat1,lon1,lat2,lon2,...)
+ * Çok uzun rotalarda URL/istek boyutunu makul tutmak için rota noktaları en
+ * fazla MAX_AROUND_POINTS adede seyreltilir.
  */
-function buildOverpassBboxQuery(bounds, tagFilter) {
-  const { south, west, north, east } = bounds;
-  return `[out:json][timeout:25];node[${tagFilter}](${south},${west},${north},${east});out center 200;`;
+const MAX_AROUND_POINTS = 120;
+
+function buildRouteAroundCoordString(coordinates) {
+  const step = Math.max(1, Math.ceil(coordinates.length / MAX_AROUND_POINTS));
+  const sampled = coordinates.filter((_, i) => i % step === 0);
+  // coordinates [lng, lat] formatında geliyor; Overpass "lat,lon" bekler.
+  return sampled.map(([lng, lat]) => `${lat.toFixed(5)},${lng.toFixed(5)}`).join(',');
 }
 
-/** Rota geometrisinden genişletilmiş bir bbox hesaplar (buffer metre cinsinden kenarlara eklenir) */
-function computeExpandedBounds(coordinates, bufferM) {
-  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
-  coordinates.forEach(([lng, lat]) => {
-    if (lat < minLat) minLat = lat;
-    if (lat > maxLat) maxLat = lat;
-    if (lng < minLng) minLng = lng;
-    if (lng > maxLng) maxLng = lng;
-  });
-  // 1 derece enlem ≈ 111km; buffer'ı dereceye çevirip kenarlara pay bırak
-  const latPad = bufferM / 111000;
-  const avgLat = (minLat + maxLat) / 2;
-  const lngPad = bufferM / (111000 * Math.max(0.15, Math.cos((avgLat * Math.PI) / 180)));
-  return { south: minLat - latPad, north: maxLat + latPad, west: minLng - lngPad, east: maxLng + lngPad };
-}
-
-/**
- * Bir noktanın rota hattına olan minimum uzaklığını (metre) hesaplar.
- * Performans için rota, ~150 noktaya seyreltilmiş segment listesi olarak taranır —
- * tam hassasiyet yerine "yeterince doğru" bir yaklaşım, binlerce POI için pratik kalır.
- */
-function minDistanceToRoute(lat, lng, routeSamples) {
-  let min = Infinity;
-  for (const [rLng, rLat] of routeSamples) {
-    const d = haversineMeters(lat, lng, rLat, rLng);
-    if (d < min) min = d;
-    if (min < 5) break; // yeterince yakın, erken çık
-  }
-  return min;
-}
-
-function filterPOIsWithinBuffer(elements, routeSamples, bufferM) {
-  return elements.filter((el) => {
-    const lat = el.lat, lng = el.lon;
-    if (lat == null || lng == null) return false;
-    return minDistanceToRoute(lat, lng, routeSamples) <= bufferM;
-  });
+function buildOverpassAroundQuery(coordinates, tagFilter, radiusM) {
+  const coordStr = buildRouteAroundCoordString(coordinates);
+  return `[out:json][timeout:25];node[${tagFilter}](around:${radiusM},${coordStr});out center 300;`;
 }
 
 async function searchPOIsAlongRoute() {
@@ -2491,10 +2729,6 @@ async function searchPOIsAlongRoute() {
   poiResultHint.classList.add('hidden');
 
   const coords = state.routeGeoJSON.coordinates;
-  const bounds = computeExpandedBounds(coords, state.bufferMeters);
-  // Mesafe filtresi için rotayı hafifçe seyrelt (150 nokta yeterli hassasiyet sağlar)
-  const routeStep = Math.max(1, Math.floor(coords.length / 150));
-  const routeSamples = coords.filter((_, i) => i % routeStep === 0);
 
   let totalFound = 0;
 
@@ -2503,7 +2737,7 @@ async function searchPOIsAlongRoute() {
       clearPoiLayer(type);
 
       const data = await overpassQueue.enqueue(async () => {
-        const query = buildOverpassBboxQuery(bounds, POI_TAG_MAP[type]);
+        const query = buildOverpassAroundQuery(coords, POI_TAG_MAP[type], ROUTE_POI_RADIUS_M);
         const res = await fetchWithTimeout(ENDPOINTS.overpass, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -2513,10 +2747,9 @@ async function searchPOIsAlongRoute() {
         return res.json();
       });
 
-      const withinBuffer = filterPOIsWithinBuffer(data.elements || [], routeSamples, state.bufferMeters);
       const seen = new Set();
 
-      withinBuffer.forEach((el) => {
+      (data.elements || []).forEach((el) => {
         if (seen.has(el.id)) return;
         seen.add(el.id);
 
@@ -2533,7 +2766,7 @@ async function searchPOIsAlongRoute() {
       });
     }
 
-    poiResultHint.textContent = `${totalFound} tesis bulundu (${state.bufferMeters}m yarıçapta).`;
+    poiResultHint.textContent = `${totalFound} tesis bulundu (yol üzerinde).`;
     poiResultHint.classList.remove('hidden');
     toast(`${totalFound} tesis haritaya eklendi.`, 'success', 'POI Arama Tamamlandı');
   } catch (err) {
@@ -2582,11 +2815,11 @@ function buildGPX(geometry, stops) {
     .join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Rotalis" xmlns="http://www.topografix.com/GPX/1/1">
+<gpx version="1.1" creator="Rotasyon" xmlns="http://www.topografix.com/GPX/1/1">
   <metadata><time>${now}</time></metadata>
 ${wpts}
   <trk>
-    <name>Rotalis Rotası</name>
+    <name>Rotasyon Rotası</name>
     <trkseg>
 ${trkpts}
     </trkseg>
@@ -2689,7 +2922,7 @@ function saveSessionToStorage() {
     const payload = {
       stops: state.stops,
       unitSystem: state.unitSystem,
-      bufferMeters: state.bufferMeters,
+      fuelType: currentFuelType,
       fuelConsumption: inputConsumption.value,
       fuelPrice: inputFuelPrice.value,
       fuelCurrency: inputCurrency.value,
@@ -2710,15 +2943,18 @@ function loadSessionFromStorage() {
 
     state.stops = payload.stops;
     state.unitSystem = payload.unitSystem || 'metric';
-    state.bufferMeters = payload.bufferMeters || 500;
 
     unitToggleLabel.textContent = state.unitSystem === 'imperial' ? 'mil' : 'km';
     updateFuelFormLabels();
+    if (payload.fuelType && FUEL_TYPES[payload.fuelType]) {
+      currentFuelType = payload.fuelType;
+      document.querySelectorAll('.fuel-type-btn').forEach((b) => {
+        b.classList.toggle('active', b.dataset.fuelType === currentFuelType);
+      });
+    }
     if (payload.fuelConsumption) inputConsumption.value = payload.fuelConsumption;
     if (payload.fuelPrice) inputFuelPrice.value = payload.fuelPrice;
     if (payload.fuelCurrency) inputCurrency.value = payload.fuelCurrency;
-    bufferSlider.value = state.bufferMeters;
-    bufferValueEl.textContent = `${state.bufferMeters} m`;
 
     renderStops();
     renderStopMarkers();
@@ -2776,7 +3012,7 @@ function init() {
   }
 
   // Durak/rota değişse de değişmese de kullanıcı yakıt/POI ayarlarını değiştirdiğinde oturumu güncel tut
-  [inputConsumption, inputFuelPrice, inputCurrency, bufferSlider].forEach((el) => {
+  [inputConsumption, inputFuelPrice, inputCurrency].forEach((el) => {
     el.addEventListener('change', saveSessionToStorage);
   });
 }
