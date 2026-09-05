@@ -56,6 +56,7 @@ html, body {
   background: #060809;
   scrollbar-gutter: stable;
   height: 100%;
+  overscroll-behavior: none;
 }
 
 /* Mobil tarayıcılarda adres çubuğunun açılıp kapanmasıyla 100vh zıplamasını
@@ -114,6 +115,22 @@ body::before {
 .leaflet-popup-content { margin: 12px 14px; font-family: 'Inter', sans-serif; font-size: 13px; }
 .leaflet-popup-close-button { color: #64748b !important; }
 
+/* Pin'in yanında sürekli görünen isim etiketi (il/ilçe/mahalle vb.) */
+.pin-label-tooltip {
+  background: rgba(13, 18, 24, 0.88);
+  backdrop-filter: blur(6px);
+  color: #f1f5f9;
+  border: 1px solid rgba(148, 176, 199, 0.2);
+  border-radius: 8px;
+  padding: 5px 11px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13.5px;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  white-space: nowrap;
+}
+.pin-label-tooltip::before { display: none; }
+
 /* ================= GLASSMORPHIC SHELL ================= */
 .glass-card {
   background: rgba(13, 18, 24, 0.62);
@@ -156,6 +173,15 @@ body.map-theme-light .glass-card {
     width: 400px;
     border-radius: 22px;
   }
+
+  /* Masaüstünde sol panel #zoom-fab'ı tamamen kapattığı için, yakınlaştır/
+     uzaklaştır butonlarını sağ alta, #map-fab'ın (konum/GPX/paylaş) hemen
+     üstüne taşıyoruz; böylece hem görünür olur hem de panelle çakışmaz. */
+  #zoom-fab {
+    left: auto;
+    right: 16px;
+    bottom: 208px;
+  }
 }
 
 /* Mobil: alttan yukarı kayan drawer */
@@ -186,11 +212,30 @@ body.map-theme-light .glass-card {
   }
   #map-fab, #zoom-fab {
     bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
   }
   #map-fab { right: 12px; }
   #zoom-fab { left: 12px; }
   #drawer-handle {
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  }
+
+  /* Drawer açıkken harita üstü FAB'lar (zoom/GPX/paylaş) drawer'ın hemen
+     üst kenarına çok yakın kalıp yanlışlıkla dokunulabiliyordu; body'ye
+     eklenen .drawer-open class'ı ile drawer açıkken bunlar gizlenir. */
+  body.drawer-open #map-fab,
+  body.drawer-open #zoom-fab {
+    opacity: 0;
+    transform: translateY(12px);
+    pointer-events: none;
+  }
+
+  /* Panel başlığı, aşağı kaydırarak paneli kapatmak için bir sürükleme
+     tutamacı gibi davranır; dikey dokunma hareketini tarayıcının kendi
+     scroll/refresh davranışına bırakmadan JS ile yönetiyoruz. */
+  #panel-drag-handle {
+    touch-action: none;
+    cursor: grab;
   }
 }
 
@@ -209,6 +254,10 @@ body.map-theme-light .glass-card {
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(148,176,199,0.2); border-radius: 10px; }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rgba(148,176,199,0.35); }
+/* Drawer içeriği kaydırılırken, kaydırma listenin sonuna geldiğinde
+   arkadaki sayfaya/haritaya "overscroll" olarak sızmasın (mobilde
+   pull-to-refresh veya harita zoom'unun kazara tetiklenmesini önler). */
+.scrollbar-thin { overscroll-behavior: contain; }
 
 /* ================= FORM ELEMENTS ================= */
 .field-label {
@@ -368,7 +417,11 @@ body.map-theme-light .layer-btn:not(.active) { color: #cbd5e1; }
 .stop-card:active { cursor: grabbing; }
 .stop-card.sortable-ghost { opacity: 0.35; }
 .stop-card.sortable-chosen { border-color: rgba(61,220,151,0.4); background: rgba(61,220,151,0.06); }
-.stop-card .drag-handle { color: #475569; font-size: 13px; padding: 0 2px; }
+.stop-card .drag-handle {
+  color: #475569; font-size: 14px;
+  padding: 11px 8px; margin: -11px 0;
+  touch-action: none;
+}
 .stop-card .stop-marker {
   width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center; font-size: 11px; color: #06120c; font-weight: 700;
@@ -377,8 +430,9 @@ body.map-theme-light .layer-btn:not(.active) { color: #cbd5e1; }
 .stop-card .stop-title { font-size: 12.5px; color: #e2e8f0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stop-card .stop-sub { font-size: 10.5px; color: #64748b; }
 .stop-card .stop-remove {
-  color: #475569; width: 26px; height: 26px; border-radius: 8px;
+  color: #475569; width: 38px; height: 38px; border-radius: 8px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  margin: -6px -6px -6px 0;
   transition: color 0.12s ease, background 0.12s ease;
 }
 .stop-card .stop-remove:hover { color: #ef5a6f; background: rgba(239,90,111,0.1); }
@@ -502,7 +556,9 @@ body.map-theme-light .layer-btn:not(.active) { color: #cbd5e1; }
 .map-pin {
   width: 30px; height: 30px;
   border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
+  transform: rotate(-45deg) scale(var(--zoom-pin-scale, 1));
+  transform-origin: bottom center;
+  transition: transform 0.15s ease;
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 3px 10px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.25);
   border: 2px solid rgba(255,255,255,0.85);
@@ -544,21 +600,67 @@ body.map-theme-light .layer-btn:not(.active) { color: #cbd5e1; }
 }
 
 /* Haritada, çoklu duraklı rotalarda her bacağın (leg) orta noktasına konan
-   mesafe/süre etiketi. Rota çizgisinin üzerinde okunaklı bir rozet gibi durur. */
-.leg-map-label {
-  transform: translate(-50%, -50%);
-  background: rgba(8, 11, 16, 0.88);
-  backdrop-filter: blur(6px);
-  border: 1px solid rgba(61, 220, 151, 0.35);
-  border-radius: 999px;
-  padding: 3px 9px;
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-  color: #e2e8f0;
-  white-space: nowrap;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+   mesafe/süre etiketi. Rota çizgisiyle karışmasın diye biraz yukarıda durur
+   ve altına, ait olduğu noktayı işaret eden küçük bir konektör çizgisi ve
+   nokta eklenir. */
+.leg-map-label-wrap {
+  transform: translate(-50%, -100%) scale(var(--zoom-label-scale, 1));
+  transform-origin: bottom center;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   pointer-events: none;
+}
+.leg-map-label {
+  background: rgba(6, 9, 13, 0.96);
+  border: 1px solid rgba(61, 220, 151, 0.55);
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #f1f5f9;
+  white-space: nowrap;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.55);
+}
+.leg-map-label-connector {
+  width: 1px;
+  height: 12px;
+  background: rgba(61, 220, 151, 0.6);
+}
+.leg-map-label-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #3ddc97;
+  margin-top: -2.5px;
+  box-shadow: 0 0 0 2px rgba(6,9,13,0.9);
+}
+
+/* Uzaklaşınca (düşük zoom) bacak etiketleri ekranda birbirine çok yaklaşıp
+   üst üste bindiği ve okunmaz hale geldiği için, belirli bir eşiğin altında
+   tamamen gizlenir; yakınlaşınca (map-zoom-far kalkınca) tekrar belirir. */
+#map.map-zoom-far .leg-map-label-wrap {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Pin yanındaki isim etiketi de aynı şekilde zoom'a göre ölçeklenir; çok
+   uzaklaşıldığında haritanın kalabalıklaşmaması için gizlenir.
+   NOT: Leaflet, tooltip'in konumunu .pin-label-tooltip elementinin kendi
+   transform'u (translate3d) ile ayarlıyor; ölçeklendirmeyi bunun üzerine
+   yazmamak için iç bir <span> sarmalayıcıya (.pin-label-inner) uyguluyoruz. */
+.pin-label-inner {
+  display: inline-block;
+  transform: scale(var(--zoom-label-scale, 1));
+  transform-origin: left center;
+  transition: transform 0.15s ease;
+}
+#map.map-zoom-far .pin-label-tooltip {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
 }
 
 /* ================= TOAST (custom, isolated) ================= */
@@ -653,7 +755,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
 </style>
 </head>
-<body class="bg-ink text-slate-200 font-body antialiased overflow-hidden h-screen w-screen">
+<body class="bg-ink text-slate-200 font-body antialiased overflow-hidden h-screen w-screen map-theme-light">
 
 <!-- ================= APP SHELL ================= -->
 <div id="app" class="relative h-screen w-screen">
@@ -664,8 +766,8 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   <!-- Harita üstü sağ üst: Katman değiştirici -->
   <div id="layer-switcher" class="absolute top-4 right-4 z-[500] flex flex-col gap-2">
     <div class="glass-card rounded-2xl p-1.5 flex gap-1">
-      <button data-layer="dark" class="layer-btn active" title="Karanlık Harita"><i class="fa-solid fa-moon"></i></button>
-      <button data-layer="osm" class="layer-btn" title="Standart Harita"><i class="fa-solid fa-map"></i></button>
+      <button data-layer="dark" class="layer-btn" title="Karanlık Harita"><i class="fa-solid fa-moon"></i></button>
+      <button data-layer="osm" class="layer-btn active" title="Standart Harita"><i class="fa-solid fa-map"></i></button>
       <button data-layer="topo" class="layer-btn" title="Topoğrafik Harita"><i class="fa-solid fa-mountain-sun"></i></button>
     </div>
   </div>
@@ -702,20 +804,23 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   <!-- ============ SOL / ALT PANEL ============ -->
   <aside id="panel" class="glass-card panel-shell">
 
-    <!-- Panel başlığı -->
-    <header class="px-5 pt-5 pb-3 flex items-center justify-between border-b border-border shrink-0">
-      <div class="flex items-center gap-2.5">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-accent2 flex items-center justify-center shadow-lg shadow-accent/20">
-          <i class="fa-solid fa-route text-ink text-sm"></i>
+    <!-- Panel başlığı: mobilde aynı zamanda aşağı kaydırarak paneli kapatma tutamacıdır -->
+    <header id="panel-drag-handle" class="px-5 pt-3 pb-3 flex flex-col items-center border-b border-border shrink-0 lg:pt-5">
+      <span id="panel-grip" class="lg:hidden w-10 h-1 rounded-full bg-slate-500/60 mb-2.5"></span>
+      <div class="w-full flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-accent2 flex items-center justify-center shadow-lg shadow-accent/20">
+            <i class="fa-solid fa-route text-ink text-sm"></i>
+          </div>
+          <div>
+            <h1 class="font-display font-bold text-[15px] leading-tight text-white">Rotasyon</h1>
+            <p class="text-[11px] text-slate-400 leading-tight">Rota Optimizasyonu &amp; Gezi Planlama</p>
+          </div>
         </div>
-        <div>
-          <h1 class="font-display font-bold text-[15px] leading-tight text-white">Rotasyon</h1>
-          <p class="text-[11px] text-slate-400 leading-tight">Rota Optimizasyonu &amp; Gezi Planlama</p>
-        </div>
+        <button id="drawer-close" class="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/5">
+          <i class="fa-solid fa-chevron-down"></i>
+        </button>
       </div>
-      <button id="drawer-close" class="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/5">
-        <i class="fa-solid fa-chevron-down"></i>
-      </button>
     </header>
 
     <!-- Panel içeriği kaydırılabilir -->
@@ -729,7 +834,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
           <input id="search-input" type="text" placeholder="Bir adres, şehir veya yer adı yazın…"
                  class="input-field pl-10 pr-10" autocomplete="off"
                  role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="search-suggestions">
-          <button id="btn-gps" title="Anlık konumumu başlangıç yap" class="absolute right-1.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg flex items-center justify-center text-accent hover:bg-accent/10 transition">
+          <button id="btn-gps" title="Anlık konumumu başlangıç yap" class="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 rounded-lg flex items-center justify-center text-accent hover:bg-accent/10 transition">
             <i class="fa-solid fa-location-dot"></i>
           </button>
           <!-- Canlı öneri listesi -->
@@ -1011,7 +1116,7 @@ const state = {
   elevationPoints: [], // [{lat, lng, elevation, distanceAlongRoute}]
   poiMarkers: { fuel: [], hotel: [], restaurant: [] },
   activePoiTypes: new Set(),
-  currentBaseLayer: 'dark',
+  currentBaseLayer: 'osm',
   unitSystem: 'metric',       // 'metric' | 'imperial'
   routeAlternatives: [],       // OSRM'den dönen tüm rota seçenekleri
   selectedRouteIndex: 0,
@@ -1151,7 +1256,7 @@ function initMap() {
     maxZoom: 17,
   });
 
-  baseLayers.dark.addTo(map);
+  baseLayers.osm.addTo(map);
 
   stopMarkersLayer = L.layerGroup().addTo(map);
   poiLayerGroup = L.layerGroup().addTo(map);
@@ -1161,10 +1266,43 @@ function initMap() {
   document.getElementById('btn-zoom-out').addEventListener('click', () => map.zoomOut());
 
   map.on('click', onMapClick);
+  map.on('zoomend', updateZoomAdaptiveStyles);
+  updateZoomAdaptiveStyles();
 
   document.querySelectorAll('.layer-btn').forEach((btn) => {
     btn.addEventListener('click', () => switchBaseLayer(btn.dataset.layer, btn));
   });
+}
+
+/**
+ * Pin ve etiketlerin harita zoom seviyesine göre optimum boyuta uyarlanmasını
+ * sağlar. Leaflet marker/tooltip'leri ekran pikseli cinsinde sabit boyutta
+ * çizildiği için, uzaklaşınca haritada olduklarından büyük/kalabalık,
+ * yakınlaşınca da orantısız küçük kalabiliyorlardı. Burada zoom seviyesine
+ * göre bir ölçek katsayısı (CSS değişkeni) hesaplanıp harita köküne
+ * uygulanıyor; ayrıca çok düşük zoom'da (uzaklaşınca) bacak mesafe etiketleri
+ * ve pin isim etiketleri üst üste binip okunmaz hale gelmesin diye tamamen
+ * gizleniyor.
+ */
+function updateZoomAdaptiveStyles() {
+  if (!map) return;
+  const zoom = map.getZoom();
+  const mapEl = document.getElementById('map');
+
+  // Referans zoom 13: bu seviyede ölçek 1'dir. Etiketler zaten temelde
+  // okunaklı bir boyutta tasarlandığı için, zoom'a göre çok agresif
+  // küçültme/büyütme yapmıyoruz; sadece hafif bir uyum sağlıyoruz.
+  const rawScale = 1 + (zoom - 13) * 0.04;
+  const clampedScale = Math.min(1.15, Math.max(0.9, rawScale));
+
+  mapEl.style.setProperty('--zoom-pin-scale', clampedScale.toFixed(3));
+  mapEl.style.setProperty('--zoom-label-scale', clampedScale.toFixed(3));
+
+  // Çok uzaklaşıldığında (zoom <= 6, örn. ülke/kıta ölçeği) mesafe/isim
+  // etiketleri ekranda çok yakın düşüp üst üste bindiği için gizlenir;
+  // pinler görünmeye devam eder. Eşik düşük tutuldu ki normal "birkaç
+  // şehir arası rota" görünümlerinde etiketler her zaman görünsün.
+  mapEl.classList.toggle('map-zoom-far', zoom <= 6);
 }
 
 function switchBaseLayer(key, btnEl) {
@@ -1207,6 +1345,15 @@ function makePinIcon(type) {
    ============================================================ */
 const searchInput = document.getElementById('search-input');
 const suggestionsBox = document.getElementById('search-suggestions');
+
+// Mobilde klavye açılınca input'un ve öneri listesinin görünür kalmasını
+// sağlamak için, odaklanma anında yumuşak bir kaydırma yapıyoruz. Klavye
+// animasyonunun oturması için küçük bir gecikme ile çağırıyoruz.
+searchInput.addEventListener('focus', () => {
+  setTimeout(() => {
+    searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 300);
+});
 
 searchInput.addEventListener('input', () => {
   const query = searchInput.value.trim();
@@ -1486,7 +1633,7 @@ function renderSuggestions(features, source = 'photon') {
       </div>`;
     item.addEventListener('click', () => {
       suggestionsBox.classList.add('hidden');
-      searchInput.value = title;
+      searchInput.value = '';
       handleSuggestionPick(lat, lng, title, sub);
     });
     suggestionsBox.appendChild(item);
@@ -1516,7 +1663,7 @@ searchInput.addEventListener('keydown', (e) => {
       const [lng, lat] = f.geometry.coordinates;
       const title = f.properties?.name || f.properties?.street || 'Bilinmeyen konum';
       suggestionsBox.classList.add('hidden');
-      searchInput.value = title;
+      searchInput.value = '';
       handleSuggestionPick(lat, lng, title, '');
     }
   } else if (e.key === 'Escape') {
@@ -1608,7 +1755,15 @@ function runGeolocation(onSuccess) {
 /* ============================================================
    7. HARİTA TIKLAMA DOĞRULAMASI (Su Tespiti & Snap-to-Road)
    ============================================================ */
+let isProcessingMapClick = false;
+
 async function onMapClick(e) {
+  // Mobilde parmakla art arda hızlı dokunulduğunda, önceki konum doğrulama
+  // isteği bitmeden yenisinin başlamasını (üst üste toast/istek birikmesini)
+  // önlemek için basit bir kilit kullanıyoruz.
+  if (isProcessingMapClick) return;
+  isProcessingMapClick = true;
+
   const { lat, lng } = e.latlng;
 
   const loadingToast = Swal.fire({
@@ -1649,10 +1804,43 @@ async function onMapClick(e) {
     toast('Konum doğrulanamadı. Servislere ulaşılamıyor olabilir, yine de durak eklendi.', 'error');
     // Ağ hatası olsa bile kullanıcı deneyimini kesmemek için ham koordinatla ekle
     await addStopDirect(lat, lng, 'Durak', '', false);
+  } finally {
+    isProcessingMapClick = false;
+  }
+}
+
+/**
+ * Verilen koordinat için Nominatim reverse geocoding kullanarak okunabilir
+ * bir yer adı (il/ilçe/mahalle/köy vb.) döndürür. Durak bir yere sürüklenip
+ * bırakıldığında (dragend) veya haritada yeni bir noktaya taşındığında,
+ * eski ismin ("Ankara" gibi) yeni konumda geçersiz kalmaması için kullanılır.
+ * Servise ulaşılamazsa ya da adres bulunamazsa null döner; çağıran taraf bu
+ * durumda mevcut ismi korumalıdır.
+ */
+async function reverseGeocodeName(lat, lng) {
+  try {
+    return await nominatimQueue.enqueue(async () => {
+      const url = `${ENDPOINTS.nominatimReverse}?format=jsonv2&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`;
+      const res = await fetchWithTimeout(url, { headers: { 'Accept-Language': 'tr' } }, 9000);
+      if (!res.ok) throw new Error(`Nominatim hata kodu: ${res.status}`);
+      const data = await res.json();
+      const addr = data.address || {};
+      // Öncelik: mahalle/köy/ilçe/il gibi insan tarafından anlamlı bir isim;
+      // hiçbiri yoksa display_name'in ilk parçasına düş.
+      const name =
+        addr.neighbourhood || addr.suburb || addr.village || addr.town ||
+        addr.district || addr.county || addr.city || addr.state ||
+        data.display_name?.split(',')[0];
+      return name || null;
+    });
+  } catch (err) {
+    console.warn('Ters coğrafi kodlama başarısız oldu:', err);
+    return null;
   }
 }
 
 async function checkIsWater(lat, lng) {
+
   return nominatimQueue.enqueue(async () => {
     const url = `${ENDPOINTS.nominatimReverse}?format=jsonv2&lat=${lat}&lon=${lng}&zoom=14&addressdetails=0`;
     const res = await fetchWithTimeout(url, {
@@ -1798,12 +1986,23 @@ function renderStops() {
       openStopContextMenu(stop.id, e.clientX, e.clientY);
     });
     let longPressTimer = null;
+    let touchStartX = 0, touchStartY = 0;
+    const LONG_PRESS_MOVE_TOLERANCE = 10; // px — bu kadar hareket "kaydırma" sayılır, menüyü iptal eder
     li.addEventListener('touchstart', (e) => {
       const touch = e.touches[0];
-      longPressTimer = setTimeout(() => openStopContextMenu(stop.id, touch.clientX, touch.clientY), 480);
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+      longPressTimer = setTimeout(() => openStopContextMenu(stop.id, touch.clientX, touch.clientY), 420);
     }, { passive: true });
     li.addEventListener('touchend', () => clearTimeout(longPressTimer));
-    li.addEventListener('touchmove', () => clearTimeout(longPressTimer));
+    li.addEventListener('touchmove', (e) => {
+      const touch = e.touches[0];
+      const dx = Math.abs(touch.clientX - touchStartX);
+      const dy = Math.abs(touch.clientY - touchStartY);
+      if (dx > LONG_PRESS_MOVE_TOLERANCE || dy > LONG_PRESS_MOVE_TOLERANCE) {
+        clearTimeout(longPressTimer);
+      }
+    }, { passive: true });
 
     stopListEl.appendChild(li);
   });
@@ -1909,12 +2108,27 @@ function renderStopMarkers() {
     const type = stopTypeFor(idx, state.stops.length);
     const marker = L.marker([stop.lat, stop.lng], { icon: makePinIcon(type), draggable: true });
     marker.bindPopup(`<b>${escapeHtml(stop.name)}</b><br><span style="color:#94a3b8">${type === 'start' ? 'Başlangıç noktası' : type === 'end' ? 'Bitiş noktası' : 'Ara durak'}</span>`);
+    marker.bindTooltip(`<span class="pin-label-inner">${escapeHtml(stop.name)}</span>`, {
+      permanent: true,
+      direction: 'right',
+      offset: [10, -14],
+      className: 'pin-label-tooltip',
+    });
     marker.on('dragend', async (ev) => {
       const { lat, lng } = ev.target.getLatLng();
       stop.lat = lat;
       stop.lng = lng;
+      // Durak yeni bir konuma taşındı; eski isim ("Ankara" gibi) artık
+      // geçersiz olabileceği için yeni konuma göre yeniden adlandırıyoruz.
+      stop.name = 'Konum güncelleniyor…';
       renderStops();
+      renderStopMarkers();
+      const newName = await reverseGeocodeName(lat, lng);
+      stop.name = newName || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      renderStops();
+      renderStopMarkers();
       if (state.stops.length >= 2) await calculateRoute();
+      saveSessionToStorage();
     });
     marker.addTo(stopMarkersLayer);
   });
@@ -2137,7 +2351,7 @@ function drawRoute(geometry) {
 }
 
 /**
- * Birden fazla durak olduğunda, her bacağın (iki ardışık durak arası) mesafe/süre
+ * En az 2 durak (1 bacak) olduğunda, her bacağın (iki ardışık durak arası) mesafe/süre
  * bilgisini haritada, o bacağın rota üzerindeki orta noktasına küçük bir etiket
  * olarak yerleştirir. Bacak sınırları, durak koordinatlarına rota geometrisi
  * üzerinde en yakın noktayı bularak (haversine ile) tespit edilir.
@@ -2145,7 +2359,7 @@ function drawRoute(geometry) {
 function drawLegLabels(routeCoordinates) {
   legLabelsLayer.clearLayers();
 
-  if (state.stops.length < 2 || state.routeLegs.length < 2) return; // tek bacaklı rotada etiket gereksiz
+  if (state.stops.length < 2 || state.routeLegs.length < 1) return; // en az 1 bacak (2 durak) gerekli
 
   // Rota koordinatlarını [lat, lng] olarak hazırla (haversine için)
   const routeLatLngs = routeCoordinates.map(([lng, lat]) => ({ lat, lng }));
@@ -2181,8 +2395,12 @@ function drawLegLabels(routeCoordinates) {
     const label = L.marker([midPoint.lat, midPoint.lng], {
       icon: L.divIcon({
         className: '',
-        html: `<div class="leg-map-label">${formatDistance(leg.distance)} ${distanceUnitLabel()} · ${formatDurationMin(leg.duration)}</div>`,
-        iconSize: null,
+        html: `<div class="leg-map-label-wrap">
+                 <div class="leg-map-label">${formatDistance(leg.distance)} ${distanceUnitLabel()} · ${formatDurationMin(leg.duration)}</div>
+                 <div class="leg-map-label-connector"></div>
+                 <div class="leg-map-label-dot"></div>
+               </div>`,
+        iconSize: [0, 0],
         iconAnchor: [0, 0],
       }),
       interactive: false,
@@ -2979,14 +3197,66 @@ function isMobileViewport() {
 function openDrawer() {
   panelEl.classList.add('open');
   drawerHandle.classList.add('hidden-handle');
+  document.body.classList.add('drawer-open');
 }
 function closeDrawer() {
   panelEl.classList.remove('open');
   drawerHandle.classList.remove('hidden-handle');
+  document.body.classList.remove('drawer-open');
 }
 
 drawerHandle.addEventListener('click', openDrawer);
 document.getElementById('drawer-close').addEventListener('click', closeDrawer);
+
+/* ---- Panel'i parmakla aşağı kaydırarak kapatma (swipe-to-dismiss) ----
+   Panel başlığından (header) başlayan bir dokunma, parmak hareketiyle
+   birebir takip edilerek panel aşağı kaydırılır; belirli bir eşiğin
+   (yükseklik veya hız) üzerinde bırakılırsa panel tamamen kapanır,
+   altındaysa yumuşak bir geçişle eski konumuna geri döner. Böylece
+   kullanıcı haritayı görmek istediğinde paneli doğal bir jestle indirebilir. */
+const panelDragHandle = document.getElementById('panel-drag-handle');
+let dragStartY = 0;
+let dragCurrentY = 0;
+let isDraggingPanel = false;
+let panelHeightAtDragStart = 0;
+
+function onPanelDragStart(e) {
+  if (!isMobileViewport() || !panelEl.classList.contains('open')) return;
+  if (e.target.closest('#drawer-close')) return; // kapatma butonuna dokunuşu sürükleme sanma
+  const touch = e.touches ? e.touches[0] : e;
+  dragStartY = touch.clientY;
+  dragCurrentY = dragStartY;
+  isDraggingPanel = true;
+  panelHeightAtDragStart = panelEl.getBoundingClientRect().height;
+  panelEl.style.transition = 'none'; // sürükleme sırasında CSS transition'ı devre dışı bırak, birebir takip etsin
+}
+
+function onPanelDragMove(e) {
+  if (!isDraggingPanel) return;
+  const touch = e.touches ? e.touches[0] : e;
+  dragCurrentY = touch.clientY;
+  const deltaY = Math.max(0, dragCurrentY - dragStartY); // sadece aşağı yönü uygula
+  panelEl.style.transform = `translateY(${deltaY}px)`;
+}
+
+function onPanelDragEnd() {
+  if (!isDraggingPanel) return;
+  isDraggingPanel = false;
+  panelEl.style.transition = ''; // CSS'teki geçiş animasyonunu geri aç
+  panelEl.style.transform = '';
+
+  const deltaY = Math.max(0, dragCurrentY - dragStartY);
+  // Panelin en az ~%28'i kadar aşağı çekildiyse tamamen kapat, aksi halde geri getir.
+  const closeThreshold = panelHeightAtDragStart * 0.28;
+  if (deltaY > closeThreshold) {
+    closeDrawer();
+  }
+}
+
+panelDragHandle.addEventListener('touchstart', onPanelDragStart, { passive: true });
+panelDragHandle.addEventListener('touchmove', onPanelDragMove, { passive: true });
+panelDragHandle.addEventListener('touchend', onPanelDragEnd);
+panelDragHandle.addEventListener('touchcancel', onPanelDragEnd);
 
 /* ============================================================
    16. UYGULAMA BAŞLATMA
