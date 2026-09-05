@@ -1140,7 +1140,8 @@ class RateLimitedQueue {
 }
 
 const nominatimQueue = new RateLimitedQueue(1100);   // ~1 istek / 1.1 sn
-const overpassQueue = new RateLimitedQueue(600);      // ardışık POI türü sorguları arasında nefes payı
+// Not: overpassQueue kaldırıldı — POI türleri artık paralel sorgulanıyor
+// (bkz. searchPOIsAlongRoute), ardışık bir hız sınırlamasına gerek kalmadı.
 const photonQueue = new RateLimitedQueue(250);        // autocomplete zaten debounce'lu, hafif bir tampon yeterli
 
 /* ============================================================
@@ -3023,42 +3024,93 @@ function clearPoiLayer(type) {
 }
 
 /**
- * Rota hattının kendisini Overpass'ın "around" operatörüne besleyerek, gerçekten
- * yol üzerinde/yol kenarında kalan tesisleri bulan sorgu kurar. Bir bbox yerine
- * doğrudan hat mesafesi kullanıldığı için "tampon" ayarına gerek kalmaz ve
- * rotadan uzak (ör. paralel bir sokaktaki veya şehrin öbür ucundaki) sonuçlar
- * sorgu aşamasında zaten elenir.
+ * Rota üzerindeki tesisleri ararken hız için tek bir bounding-box (bbox)
+ * sorgusu kullanılır; "rota üzerinde mi" kontrolü (ROUTE_POI_RADIUS_M) sorgu
+ * sonrası JS tarafında, her sonucun rota hattına olan gerçek mesafesiyle
+ * yapılır.
  *
- * Overpass'ın "around" sözdizimi: (around:RADIUS,lat1,lon1,lat2,lon2,...)
- * Çok uzun rotalarda URL/istek boyutunu makul tutmak için rota noktaları en
- * fazla MAX_AROUND_POINTS adede seyreltilir.
+ * Neden bbox, "around" değil: Overpass'ın "around" filtresi tek bir merkez
+ * noktası alır; rota boyunca onlarca ayrı "around" bloğu (her örneklenen
+ * nokta için bir tane) yazmak sunucuda onlarca ayrı spatial-index taraması
+ * anlamına gelir ve gözle görülür yavaşlığa yol açar — az sayıda nokta
+ * ("1-2 tesis") bulup çok bekleten önceki davranışın sebebi buydu. Tek bir
+ * bbox sorgusu ise sunucu için TEK bir indeks taraması olduğundan çok daha
+ * hızlı yanıt verir; rotanın gerçek şekline uymayan (bbox köşelerindeki)
+ * fazladan sonuçlar ise zaten client-side mesafe filtresiyle eleniyor.
  */
-const MAX_AROUND_POINTS = 60;
+const MAX_AROUND_POINTS = 200; // client-side mesafe hesaplaması için örnekleme sıklığı
 
-function buildRouteAroundCoordString(coordinates) {
+function sampleRouteCoordinates(coordinates) {
   const step = Math.max(1, Math.ceil(coordinates.length / MAX_AROUND_POINTS));
   const sampled = coordinates.filter((_, i) => i % step === 0);
-  // coordinates [lng, lat] formatında geliyor; Overpass "lat,lon" bekler.
-  return sampled.map(([lng, lat]) => `${lat.toFixed(5)},${lng.toFixed(5)}`).join(',');
+  // coordinates [lng, lat] formatında geliyor.
+  return sampled.map(([lng, lat]) => ({ lat, lon: lng }));
+}
+
+/** Rotanın tüm noktalarını kapsayan, radyüs kadar genişletilmiş bounding box döndürür. */
+function computeRouteBoundingBox(points, radiusM) {
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+  points.forEach(({ lat, lon }) => {
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+    if (lon < minLon) minLon = lon;
+    if (lon > maxLon) maxLon = lon;
+  });
+  // Radyüsü kabaca derece cinsine çevirip bbox'a pay olarak ekle (enlem
+  // farkını göz ardı eden basit bir yaklaşım; POI aramasında yeterli hassasiyette).
+  const padDeg = (radiusM / 111000) * 1.5; // %50 güvenlik payı
+  return {
+    south: (minLat - padDeg).toFixed(6),
+    west: (minLon - padDeg).toFixed(6),
+    north: (maxLat + padDeg).toFixed(6),
+    east: (maxLon + padDeg).toFixed(6),
+  };
 }
 
 function buildOverpassAroundQuery(coordinates, tagFilter, radiusM) {
-  const coordStr = buildRouteAroundCoordString(coordinates);
-  // node + way + relation üçü birden sorgulanıyor: bazı tesisler (özellikle
-  // büyük oteller, AVM içi restoranlar, geniş benzinlik alanları) OSM'de tek
-  // bir nokta değil, bir alan (way/relation) olarak haritalanıyor. Sadece
-  // node aranırsa bu tesisler tamamen atlanır. "out center" way/relation
-  // için de kullanılabilir bir merkez koordinatı döndürür.
+  const points = sampleRouteCoordinates(coordinates);
+  const bbox = computeRouteBoundingBox(points, radiusM);
+
   // Sunucu tarafı zaman aşımı (20s), bizim client zaman aşımımızdan (30s,
   // aşağıda fetchWithTimeout çağrısında) kısa tutuluyor; böylece Overpass
   // kendi süresini doldurunca düzgün bir hata gövdesiyle yanıt verme fırsatı
   // buluyor, bizim tarafımızda sessizce "isteğin ortasında" kesilmiyor.
-  return `[out:json][timeout:20];(
-    node[${tagFilter}](around:${radiusM},${coordStr});
-    way[${tagFilter}](around:${radiusM},${coordStr});
-    relation[${tagFilter}](around:${radiusM},${coordStr});
-  );out center 300;`;
+  // "nwr" (node+way+relation birleşimi), hem nokta hem alan (way/relation)
+  // olarak haritalanmış tesisleri (büyük oteller, AVM içi restoranlar vb.)
+  // tek satırda kapsar.
+  return `[out:json][timeout:20];
+    nwr[${tagFilter}](${bbox.south},${bbox.west},${bbox.north},${bbox.east});
+  out center 500;`;
 }
+
+/**
+ * İki nokta arası mesafeyi (metre) haversine formülüyle hesaplar. POI
+ * sonuçlarının gerçekten "rota üzerinde" mi yoksa sadece bbox içinde ama
+ * rotadan uzakta mı olduğunu ayırt etmek için kullanılır.
+ */
+function haversineDistanceM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/** Verilen noktanın, örneklenmiş rota noktalarından en az birine olan en kısa mesafesini (metre) döndürür. */
+function distanceToRouteM(lat, lon, routePoints) {
+  let min = Infinity;
+  for (const p of routePoints) {
+    const d = haversineDistanceM(lat, lon, p.lat, p.lon);
+    if (d < min) min = d;
+    if (min <= 1) break; // pratik olarak sıfır, daha fazla aramaya gerek yok
+  }
+  return min;
+}
+
+
 
 /**
  * Tek bir Overpass isteğini önce GET, o başarısız olursa aynı sunucuda POST
@@ -3072,13 +3124,19 @@ function buildOverpassAroundQuery(coordinates, tagFilter, radiusM) {
  * tercih edebileceğinden veya GET için URL uzunluk sınırına takılabileceğinden,
  * GET başarısız olursa aynı uç noktada POST da bir kez deneniyor.
  */
+// Bbox tabanlı sorgu tek bir spatial-index taraması gerektirdiğinden çok daha
+// hafiftir; bu yüzden timeout önceki (30sn) değerden kısaltıldı — bir mirror
+// gerçekten yanıt vermiyorsa kullanıcıyı daha az bekletip bir sonraki mirror'a
+// hızlıca geçiliyor.
+const OVERPASS_TIMEOUT_MS = 15000;
+
 async function fetchFromOverpassEndpoint(endpoint, query) {
   try {
     const url = `${endpoint}?data=${encodeURIComponent(query)}`;
     const res = await fetchWithTimeout(url, {
       method: 'GET',
       headers: { 'Accept': 'application/json, text/plain, */*' },
-    }, 30000);
+    }, OVERPASS_TIMEOUT_MS);
     if (res.ok) return res;
     // 405 (Method Not Allowed) veya 414 (URI Too Long) gibi durumlarda
     // POST'u dene; diğer durumlarda da zarar vermez, aynı sonuca varır.
@@ -3089,7 +3147,7 @@ async function fetchFromOverpassEndpoint(endpoint, query) {
         'Accept': 'application/json, text/plain, */*',
       },
       body: 'data=' + encodeURIComponent(query),
-    }, 30000);
+    }, OVERPASS_TIMEOUT_MS);
   } catch (getErr) {
     // GET ağ/CORS hatasıyla tamamen başarısız oldu; aynı uç noktada POST'u dene.
     return fetchWithTimeout(endpoint, {
@@ -3099,7 +3157,7 @@ async function fetchFromOverpassEndpoint(endpoint, query) {
         'Accept': 'application/json, text/plain, */*',
       },
       body: 'data=' + encodeURIComponent(query),
-    }, 30000);
+    }, OVERPASS_TIMEOUT_MS);
   }
 }
 
@@ -3164,18 +3222,38 @@ async function searchPOIsAlongRoute() {
   poiResultHint.classList.add('hidden');
 
   const coords = state.routeGeoJSON.coordinates;
+  const routePoints = sampleRouteCoordinates(coords);
+  const activeTypes = Array.from(state.activePoiTypes);
 
   let totalFound = 0;
+  const errors = [];
 
   try {
-    for (const type of state.activePoiTypes) {
-      clearPoiLayer(type);
-
-      const data = await overpassQueue.enqueue(async () => {
+    // Seçilen tüm POI türleri (Benzinlik/Otel/Restoran) TEK TEK sırayla değil,
+    // AYNI ANDA (paralel) sorgulanıyor. Önceki sürüm her türü sırayla, aralarına
+    // 600ms bekleme koyarak işliyordu; 3 tür seçiliyse bu, toplam süreyi 3 kata
+    // katlıyordu. Overpass sunucuları eşzamanlı birkaç isteği rahatlıkla
+    // kaldırabildiği için, buradaki tek sıralı kısıtlama zaten "her sunucuya
+    // art arda çok hızlı istek atmamak" amaçlıydı — paralel çalıştırmak bu
+    // amacı bozmuyor çünkü toplam istek sayısı aynı, sadece eşzamanlı.
+    const results = await Promise.allSettled(
+      activeTypes.map(async (type) => {
+        clearPoiLayer(type);
         const query = buildOverpassAroundQuery(coords, POI_TAG_MAP[type], ROUTE_POI_RADIUS_M);
-        return fetchFromOverpassWithMirrors(query, POI_LABELS[type]);
-      });
+        const data = await fetchFromOverpassWithMirrors(query, POI_LABELS[type]);
+        return { type, data };
+      })
+    );
 
+    results.forEach((result, i) => {
+      const type = activeTypes[i];
+      if (result.status === 'rejected') {
+        console.error(`Overpass POI arama hatası (${POI_LABELS[type]}):`, result.reason);
+        errors.push({ type, err: result.reason });
+        return;
+      }
+
+      const { data } = result.value;
       const seen = new Set();
 
       (data.elements || []).forEach((el) => {
@@ -3192,6 +3270,11 @@ async function searchPOIsAlongRoute() {
         const lon = el.lon ?? el.center?.lon;
         if (lat == null || lon == null) return; // koordinatsız/eksik sonucu atla
 
+        // Sorgu, hızlı olması için rotayı çevreleyen bir bbox kullandığından,
+        // bbox'ın köşelerinde kalıp rotadan aslında uzak olan sonuçları burada,
+        // rota hattına olan gerçek mesafeye göre eliyoruz.
+        if (distanceToRouteM(lat, lon, routePoints) > ROUTE_POI_RADIUS_M) return;
+
         const name = el.tags?.name || POI_LABELS[type];
         const marker = L.marker([lat, lon], { icon: makePinIcon(type) });
         marker.bindPopup(`
@@ -3203,11 +3286,19 @@ async function searchPOIsAlongRoute() {
         state.poiMarkers[type].push(marker);
         totalFound++;
       });
-    }
+    });
 
     poiResultHint.textContent = `${totalFound} tesis bulundu (yol üzerinde).`;
     poiResultHint.classList.remove('hidden');
-    toast(`${totalFound} tesis haritaya eklendi.`, 'success', 'POI Arama Tamamlandı');
+
+    if (errors.length === 0) {
+      toast(`${totalFound} tesis haritaya eklendi.`, 'success', 'POI Arama Tamamlandı');
+    } else {
+      // Bazı türler başarılı bazıları başarısız olabilir; kısmi sonucu göster
+      // ama hangi türlerin başarısız olduğunu da belirt.
+      const failedLabels = errors.map((e) => POI_LABELS[e.type]).join(', ');
+      toast(`${totalFound} tesis bulundu. Bazı türler başarısız oldu: ${failedLabels}.`, 'error', 'Kısmi Sonuç');
+    }
   } catch (err) {
     console.error('Overpass POI arama hatası:', err);
     // Ağ/CORS/timeout hatalarında err.message genelde "Failed to fetch" gibi
