@@ -115,6 +115,32 @@ body::before {
 .leaflet-popup-content { margin: 12px 14px; font-family: 'Inter', sans-serif; font-size: 13px; }
 .leaflet-popup-close-button { color: #64748b !important; }
 
+/* Durak pin'ine tıklayınca açılan mini pencere: isim zaten pinin yanında
+   sürekli görünen etikette yazdığı için burada tekrar edilmiyor, sadece
+   "Durağı Sil" aksiyonu gösteriliyor. Leaflet'in varsayılan kapatma çarpısı
+   (closeButton:false) kapatıldı ki silme çarpısıyla üst üste binmesin. */
+.stop-delete-popup .leaflet-popup-content-wrapper { padding: 4px; border-radius: 12px; }
+.stop-delete-popup .leaflet-popup-content { margin: 0; }
+.stop-popup-remove-only {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 9px 14px;
+  border-radius: 9px;
+  background: rgba(239, 90, 111, 0.14);
+  border: 1px solid rgba(239, 90, 111, 0.35);
+  color: #ef5a6f;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.stop-popup-remove-only:hover { background: rgba(239, 90, 111, 0.26); }
+.stop-popup-remove-only:active { transform: scale(0.96); }
+
 /* Pin'in yanında sürekli görünen isim etiketi (il/ilçe/mahalle vb.) */
 .pin-label-tooltip {
   background: rgba(13, 18, 24, 0.88);
@@ -1001,10 +1027,12 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
     </div>
 
-    <!-- Panel altı: sabit aksiyon butonu -->
-    <footer class="px-5 py-4 border-t border-border shrink-0">
+    <!-- Panel altı: sadece rota hesaplama başarısız olduğunda "Tekrar Dene"
+         butonu olarak görünür; normal akışta rota her durak değişikliğinde
+         otomatik hesaplandığı için bu buton varsayılan olarak gizlidir. -->
+    <footer id="btn-calc-route-footer" class="px-5 py-4 border-t border-border shrink-0 hidden">
       <button id="btn-calc-route" class="btn-primary w-full text-sm py-3">
-        <i class="fa-solid fa-diagram-project"></i> Rotayı Hesapla
+        <i class="fa-solid fa-arrow-rotate-right"></i> Tekrar Dene
       </button>
     </footer>
   </aside>
@@ -1035,6 +1063,17 @@ const ENDPOINTS = {
   osrmNearest: 'https://router.project-osrm.org/nearest/v1/driving/',
   osrmTrip: 'https://router.project-osrm.org/trip/v1/driving/',
   overpass: 'https://overpass-api.de/api/interpreter',
+  // overpass-api.de, tarayıcıdan gelen isteklere (özellikle POST'un tetiklediği
+  // CORS preflight'a) düzenli olarak HTTP 406 (Not Acceptable) döndürüyor;
+  // istek sunucuya hiç ulaşmadan reddedildiği için POI araması hep "0 tesis"
+  // ile sonuçlanıyordu. Bu yüzden overpass-api.de burada son çare olarak en
+  // sona alındı; birincil ve ikincil olarak, tarayıcıdan erişimi güvenilir
+  // şekilde çalıştığı doğrulanan topluluk aynaları (mirror) kullanılıyor.
+  overpassMirrors: [
+    'https://overpass.private.coffee/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass-api.de/api/interpreter',
+  ],
   elevation: 'https://api.open-elevation.com/api/v1/lookup',
   locationIq: 'https://us1.locationiq.com/v1/search',
   gpxz: 'https://api.gpxz.io/v1/elevation/point',
@@ -1752,6 +1791,26 @@ function runGeolocation(onSuccess) {
   );
 }
 
+/**
+ * Haritanın o anki Leaflet zoom seviyesine karşılık gelen Nominatim "zoom"
+ * (adres detay) seviyesini döndürür. Nominatim'de zoom parametresi, hangi
+ * idari/coğrafi seviyede isim aranacağını belirler (3≈ülke, 8≈il, 10≈ilçe,
+ * 14≈mahalle/köy, 18≈sokak/bina). Sabit bir değer yerine haritanın gerçek
+ * yakınlaşma seviyesini kullanarak, uzaktan tıklanan bir noktada şehir/il
+ * adı, iyice yakınlaşılmış bir noktada ise mahalle/cadde adı dönmesini
+ * sağlıyoruz — önceki sabit "14" değeri uzaktaki tıklamalarda çoğu zaman
+ * sonuçsuz kalıp durağın adının "Durak" olarak kalmasına yol açıyordu.
+ */
+function nominatimZoomForMapZoom(mapZoom) {
+  if (mapZoom <= 6) return 5;   // ülke / bölge
+  if (mapZoom <= 8) return 6;   // il (büyük ölçek)
+  if (mapZoom <= 10) return 10; // il / büyük ilçe
+  if (mapZoom <= 12) return 12; // ilçe
+  if (mapZoom <= 14) return 14; // ilçe / mahalle-köy
+  if (mapZoom <= 16) return 16; // mahalle / semt
+  return 18;                     // cadde / sokak / bina
+}
+
 /* ============================================================
    7. HARİTA TIKLAMA DOĞRULAMASI (Su Tespiti & Snap-to-Road)
    ============================================================ */
@@ -1765,6 +1824,7 @@ async function onMapClick(e) {
   isProcessingMapClick = true;
 
   const { lat, lng } = e.latlng;
+  const clickZoom = map.getZoom();
 
   const loadingToast = Swal.fire({
     toast: true, position: 'top-end', showConfirmButton: false,
@@ -1797,7 +1857,18 @@ async function onMapClick(e) {
       return;
     }
 
-    await addStopDirect(snapped.lat, snapped.lng, snapped.name || 'Durak', '', false);
+    // OSRM'in verdiği yol/cadde adı sadece yakın zoom seviyelerinde anlamlı
+    // bir "durak adı" olur (ör. "Atatürk Bulvarı"). Uzaktan (şehir/il ölçeğinde)
+    // tıklandığında OSRM ismi çoğu zaman boş gelir veya tek başına yetersiz
+    // kalır; bu durumda haritanın o anki zoom seviyesine göre (il/ilçe/mahalle)
+    // Nominatim'den yer adı alıp durağa onu veriyoruz.
+    let stopName = snapped.name;
+    if (!stopName || clickZoom < 15) {
+      const geocodedName = await reverseGeocodeName(snapped.lat, snapped.lng, clickZoom);
+      stopName = geocodedName || snapped.name || 'Durak';
+    }
+
+    await addStopDirect(snapped.lat, snapped.lng, stopName, '', false);
   } catch (err) {
     Swal.close();
     console.error('Harita tıklama doğrulama hatası:', err);
@@ -1811,26 +1882,50 @@ async function onMapClick(e) {
 
 /**
  * Verilen koordinat için Nominatim reverse geocoding kullanarak okunabilir
- * bir yer adı (il/ilçe/mahalle/köy vb.) döndürür. Durak bir yere sürüklenip
- * bırakıldığında (dragend) veya haritada yeni bir noktaya taşındığında,
- * eski ismin ("Ankara" gibi) yeni konumda geçersiz kalmaması için kullanılır.
+ * bir yer adı (il/ilçe/mahalle/köy/sokak vb.) döndürür. Durak bir yere
+ * sürüklenip bırakıldığında (dragend), haritada yeni bir noktaya
+ * taşındığında veya haritaya uzaktan tıklandığında kullanılır.
+ *
+ * `mapZoom` verildiğinde, hem Nominatim'e sorulan detay seviyesi hem de
+ * yanıttaki hangi adres alanının öncelikli okunacağı haritanın o anki
+ * yakınlaşma seviyesine göre ayarlanır: uzaktan tıklamada il/ilçe adı,
+ * yakından tıklamada mahalle/cadde adı döner. `mapZoom` verilmezse (ör.
+ * sürükle-bırak sonrası, harita zaten yakın olduğundan) eski davranış
+ * korunur: sabit zoom=14 ile mahalle/köy seviyesinde arama yapılır.
+ *
  * Servise ulaşılamazsa ya da adres bulunamazsa null döner; çağıran taraf bu
  * durumda mevcut ismi korumalıdır.
  */
-async function reverseGeocodeName(lat, lng) {
+async function reverseGeocodeName(lat, lng, mapZoom = null) {
+  const nomZoom = mapZoom != null ? nominatimZoomForMapZoom(mapZoom) : 14;
+
   try {
     return await nominatimQueue.enqueue(async () => {
-      const url = `${ENDPOINTS.nominatimReverse}?format=jsonv2&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`;
+      const url = `${ENDPOINTS.nominatimReverse}?format=jsonv2&lat=${lat}&lon=${lng}&zoom=${nomZoom}&addressdetails=1`;
       const res = await fetchWithTimeout(url, { headers: { 'Accept-Language': 'tr' } }, 9000);
       if (!res.ok) throw new Error(`Nominatim hata kodu: ${res.status}`);
       const data = await res.json();
       const addr = data.address || {};
-      // Öncelik: mahalle/köy/ilçe/il gibi insan tarafından anlamlı bir isim;
-      // hiçbiri yoksa display_name'in ilk parçasına düş.
-      const name =
-        addr.neighbourhood || addr.suburb || addr.village || addr.town ||
-        addr.district || addr.county || addr.city || addr.state ||
-        data.display_name?.split(',')[0];
+
+      // Zoom seviyesine göre öncelik sırası değişir: uzaktan bakışta önce
+      // il/ilçe gibi geniş kapsamlı bir isim aranır (mahalle adı tek başına
+      // anlamsız kalır), yakından bakışta önce sokak/mahalle gibi dar
+      // kapsamlı, daha spesifik bir isim aranır.
+      const name = nomZoom <= 10
+        // Uzak görünüm: il / büyük ilçe seviyesi
+        ? (addr.province || addr.state || addr.city || addr.county ||
+           addr.district || data.display_name?.split(',')[0])
+        : nomZoom <= 14
+        // Orta görünüm: ilçe / mahalle-köy seviyesi
+        ? (addr.district || addr.county || addr.town || addr.village ||
+           addr.suburb || addr.neighbourhood || addr.city ||
+           data.display_name?.split(',')[0])
+        // Yakın görünüm: mahalle / cadde-sokak seviyesi
+        : (addr.road
+            ? (addr.house_number ? `${addr.road} ${addr.house_number}` : addr.road)
+            : addr.neighbourhood || addr.suburb || addr.village ||
+              data.display_name?.split(',')[0]);
+
       return name || null;
     });
   } catch (err) {
@@ -1923,6 +2018,14 @@ function removeStop(id) {
   }
   saveSessionToStorage();
 }
+
+// Harita üzerindeki durak pin'inin popup'ındaki silme (X) butonundan çağrılır.
+// Popup içeriği Leaflet tarafından ham HTML olarak render edildiğinden,
+// inline onclick üzerinden erişilebilmesi için fonksiyon window'a bağlanıyor.
+window.__removeStopFromPopup = function (id) {
+  map.closePopup();
+  removeStop(id);
+};
 
 function clearAllStops() {
   if (!state.stops.length) return;
@@ -2107,7 +2210,11 @@ function renderStopMarkers() {
   state.stops.forEach((stop, idx) => {
     const type = stopTypeFor(idx, state.stops.length);
     const marker = L.marker([stop.lat, stop.lng], { icon: makePinIcon(type), draggable: true });
-    marker.bindPopup(`<b>${escapeHtml(stop.name)}</b><br><span style="color:#94a3b8">${type === 'start' ? 'Başlangıç noktası' : type === 'end' ? 'Bitiş noktası' : 'Ara durak'}</span>`);
+    marker.bindPopup(`
+      <button type="button" class="stop-popup-remove-only" onclick="window.__removeStopFromPopup('${stop.id}')" title="Bu durağı sil" aria-label="Bu durağı sil">
+        <i class="fa-solid fa-trash-can"></i> Durağı Sil
+      </button>
+    `, { closeButton: false, className: 'stop-delete-popup' });
     marker.bindTooltip(`<span class="pin-label-inner">${escapeHtml(stop.name)}</span>`, {
       permanent: true,
       direction: 'right',
@@ -2123,7 +2230,7 @@ function renderStopMarkers() {
       stop.name = 'Konum güncelleniyor…';
       renderStops();
       renderStopMarkers();
-      const newName = await reverseGeocodeName(lat, lng);
+      const newName = await reverseGeocodeName(lat, lng, map.getZoom());
       stop.name = newName || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
       renderStops();
       renderStopMarkers();
@@ -2196,6 +2303,7 @@ document.getElementById('btn-calc-route').addEventListener('click', () => {
 async function calculateRoute() {
   if (state.stops.length < 2) return;
 
+  const calcBtnFooter = document.getElementById('btn-calc-route-footer');
   const calcBtn = document.getElementById('btn-calc-route');
   const originalBtnHtml = calcBtn.innerHTML;
   calcBtn.disabled = true;
@@ -2224,12 +2332,18 @@ async function calculateRoute() {
     applySelectedRoute(0);
 
     saveSessionToStorage();
+    // Rota otomatik olarak başarıyla hesaplandı; "Tekrar Dene" butonuna
+    // artık ihtiyaç yok, gizli kalmaya devam etsin.
+    calcBtnFooter.classList.add('hidden');
   } catch (err) {
     console.error('Rota hesaplama hatası:', err);
     toast('Rota hesaplanamadı: ' + err.message, 'error', 'Rota Hatası');
     // Hata durumunda eski rotayı tekrar tam opaklığa döndür
     if (routeLine) routeLine.setStyle({ opacity: 0.95 });
     if (routeOutline) routeOutline.setStyle({ opacity: 0.55 });
+    // Otomatik hesaplama başarısız oldu; kullanıcının elle tekrar
+    // deneyebilmesi için butonu görünür yapıyoruz.
+    calcBtnFooter.classList.remove('hidden');
   } finally {
     calcBtn.disabled = false;
     calcBtn.innerHTML = originalBtnHtml;
@@ -2878,11 +2992,14 @@ const POI_TAG_MAP = {
 };
 const POI_LABELS = { fuel: 'Benzinlik', hotel: 'Otel', restaurant: 'Restoran' };
 
-// Tesisler artık sabit bir "tampon" ayarı yerine, doğrudan rota hattının kendisine
-// (Overpass'ın "around" operatörü ile) göre aranıyor: yol üzerinde/yol kenarında olan
-// tesisler bulunur. 80m, bir yolun kenarındaki bina/tesisi kapsayacak kadar dar ama
-// paralel bir sokaktaki alakasız sonuçları da büyük ölçüde eleyecek kadar sıkı bir değer.
-const ROUTE_POI_RADIUS_M = 80;
+// Tesisler, rota hattının kendisine (Overpass'ın "around" operatörü ile) göre
+// aranıyor: yol üzerinde/yol kenarında olan tesisler bulunur. Önceki değer
+// (80m) gerçekte yoldan biraz içeride kalan, bir kavşağın arkasında olan veya
+// hizmet yolu üzerindeki çoğu tesisi (özellikle şehir içi restoran/otelleri)
+// tamamen dışarıda bırakıyordu — "tesis bulunamıyor" hissinin asıl sebebi
+// veri eksikliği değil, bu aşırı dar aramaydı. 300m, hâlâ "rota üzerinde"
+// sayılabilecek ama gerçekçi bir kapsama alanı sağlıyor.
+const ROUTE_POI_RADIUS_M = 300;
 
 document.querySelectorAll('.poi-toggle').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -2916,7 +3033,7 @@ function clearPoiLayer(type) {
  * Çok uzun rotalarda URL/istek boyutunu makul tutmak için rota noktaları en
  * fazla MAX_AROUND_POINTS adede seyreltilir.
  */
-const MAX_AROUND_POINTS = 120;
+const MAX_AROUND_POINTS = 60;
 
 function buildRouteAroundCoordString(coordinates) {
   const step = Math.max(1, Math.ceil(coordinates.length / MAX_AROUND_POINTS));
@@ -2927,7 +3044,107 @@ function buildRouteAroundCoordString(coordinates) {
 
 function buildOverpassAroundQuery(coordinates, tagFilter, radiusM) {
   const coordStr = buildRouteAroundCoordString(coordinates);
-  return `[out:json][timeout:25];node[${tagFilter}](around:${radiusM},${coordStr});out center 300;`;
+  // node + way + relation üçü birden sorgulanıyor: bazı tesisler (özellikle
+  // büyük oteller, AVM içi restoranlar, geniş benzinlik alanları) OSM'de tek
+  // bir nokta değil, bir alan (way/relation) olarak haritalanıyor. Sadece
+  // node aranırsa bu tesisler tamamen atlanır. "out center" way/relation
+  // için de kullanılabilir bir merkez koordinatı döndürür.
+  // Sunucu tarafı zaman aşımı (20s), bizim client zaman aşımımızdan (30s,
+  // aşağıda fetchWithTimeout çağrısında) kısa tutuluyor; böylece Overpass
+  // kendi süresini doldurunca düzgün bir hata gövdesiyle yanıt verme fırsatı
+  // buluyor, bizim tarafımızda sessizce "isteğin ortasında" kesilmiyor.
+  return `[out:json][timeout:20];(
+    node[${tagFilter}](around:${radiusM},${coordStr});
+    way[${tagFilter}](around:${radiusM},${coordStr});
+    relation[${tagFilter}](around:${radiusM},${coordStr});
+  );out center 300;`;
+}
+
+/**
+ * Tek bir Overpass isteğini önce GET, o başarısız olursa aynı sunucuda POST
+ * ile dener.
+ *
+ * GET tercih edilir çünkü overpass-api.de, tarayıcıdan gelen POST isteklerinin
+ * tetiklediği CORS preflight'ını (OPTIONS) HTTP 406 ile reddediyor — istek
+ * gövdesi sunucuya hiç ulaşmadan düşüyordu, bu da POI aramasının hep
+ * "0 tesis" ile sonuçlanmasının asıl sebebiydi. GET istekleri "basit" CORS
+ * istekleridir ve preflight gerektirmez. Yine de bazı aynalar (mirror) POST'u
+ * tercih edebileceğinden veya GET için URL uzunluk sınırına takılabileceğinden,
+ * GET başarısız olursa aynı uç noktada POST da bir kez deneniyor.
+ */
+async function fetchFromOverpassEndpoint(endpoint, query) {
+  try {
+    const url = `${endpoint}?data=${encodeURIComponent(query)}`;
+    const res = await fetchWithTimeout(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json, text/plain, */*' },
+    }, 30000);
+    if (res.ok) return res;
+    // 405 (Method Not Allowed) veya 414 (URI Too Long) gibi durumlarda
+    // POST'u dene; diğer durumlarda da zarar vermez, aynı sonuca varır.
+    return await fetchWithTimeout(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json, text/plain, */*',
+      },
+      body: 'data=' + encodeURIComponent(query),
+    }, 30000);
+  } catch (getErr) {
+    // GET ağ/CORS hatasıyla tamamen başarısız oldu; aynı uç noktada POST'u dene.
+    return fetchWithTimeout(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json, text/plain, */*',
+      },
+      body: 'data=' + encodeURIComponent(query),
+    }, 30000);
+  }
+}
+
+/**
+ * Overpass sorgusunu birincil sunucuya, o başarısız olursa sırayla topluluk
+ * aynalarına gönderir (bkz. fetchFromOverpassEndpoint için GET/POST tercihi).
+ */
+async function fetchFromOverpassWithMirrors(query, label) {
+  let lastError = null;
+
+  for (const endpoint of ENDPOINTS.overpassMirrors) {
+    try {
+      const res = await fetchFromOverpassEndpoint(endpoint, query);
+
+      if (!res.ok) {
+        // Overpass, sorgu hatalarında (400) veya aşırı yüklenmede (429/504)
+        // genelde body'de okunabilir bir açıklama döndürür; sadece status
+        // kodunu göstermek yerine bu detayı da yakalayıp konsola basıyoruz
+        // ki gerçek sebep ("rate limited", "syntax error", "406" vb.) görülebilsin.
+        let detail = '';
+        try { detail = (await res.text()).slice(0, 300); } catch (_) { /* body okunamadı, sessiz geç */ }
+        console.error(`Overpass hata gövdesi (${label}, ${endpoint}, HTTP ${res.status}):`, detail);
+
+        // 406/429/5xx gibi durumlarda bir sonraki aynaya geçmeyi dene;
+        // 400 (sözdizimi hatası) gibi durumlarda aynayı değiştirmenin
+        // faydası olmaz ama yine de devam edip son hatayı raporluyoruz.
+        lastError = new Error(
+          res.status === 429 || res.status === 504
+            ? `${label} araması başarısız: Overpass sunucusu şu an yoğun, birkaç saniye sonra tekrar deneyin.`
+            : res.status === 406
+            ? `${label} araması başarısız: Overpass sunucusu isteği reddetti (406).`
+            : `${label} araması başarısız: HTTP ${res.status}`
+        );
+        continue;
+      }
+
+      return await res.json();
+    } catch (err) {
+      // Ağ/CORS/timeout hatası: bir sonraki aynayı dene.
+      console.error(`Overpass isteği başarısız (${label}, ${endpoint}):`, err);
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error(`${label} araması başarısız: Hiçbir Overpass sunucusuna ulaşılamadı.`);
 }
 
 async function searchPOIsAlongRoute() {
@@ -2956,23 +3173,27 @@ async function searchPOIsAlongRoute() {
 
       const data = await overpassQueue.enqueue(async () => {
         const query = buildOverpassAroundQuery(coords, POI_TAG_MAP[type], ROUTE_POI_RADIUS_M);
-        const res = await fetchWithTimeout(ENDPOINTS.overpass, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'data=' + encodeURIComponent(query),
-        }, 25000);
-        if (!res.ok) throw new Error(`Overpass API hata kodu (${POI_LABELS[type]}): ${res.status}`);
-        return res.json();
+        return fetchFromOverpassWithMirrors(query, POI_LABELS[type]);
       });
 
       const seen = new Set();
 
       (data.elements || []).forEach((el) => {
-        if (seen.has(el.id)) return;
-        seen.add(el.id);
+        // Overpass'ta node/way/relation ID uzayları birbirinden bağımsızdır;
+        // aynı sayısal id farklı tiplerde farklı gerçek nesneleri belirtebilir.
+        // Bu yüzden benzersizlik anahtarına tipi de dahil ediyoruz.
+        const uniqueKey = `${el.type}/${el.id}`;
+        if (seen.has(uniqueKey)) return;
+        seen.add(uniqueKey);
+
+        // node elemanları doğrudan lat/lon taşır; way/relation elemanları
+        // (out center sayesinde) center.lat/center.lon taşır.
+        const lat = el.lat ?? el.center?.lat;
+        const lon = el.lon ?? el.center?.lon;
+        if (lat == null || lon == null) return; // koordinatsız/eksik sonucu atla
 
         const name = el.tags?.name || POI_LABELS[type];
-        const marker = L.marker([el.lat, el.lon], { icon: makePinIcon(type) });
+        const marker = L.marker([lat, lon], { icon: makePinIcon(type) });
         marker.bindPopup(`
           <b>${escapeHtml(name)}</b><br>
           <span style="color:#94a3b8">${POI_LABELS[type]}</span>
@@ -2989,7 +3210,17 @@ async function searchPOIsAlongRoute() {
     toast(`${totalFound} tesis haritaya eklendi.`, 'success', 'POI Arama Tamamlandı');
   } catch (err) {
     console.error('Overpass POI arama hatası:', err);
-    toast('Tesis araması başarısız: ' + err.message, 'error', 'POI Hatası');
+    // Ağ/CORS/timeout hatalarında err.message genelde "Failed to fetch" gibi
+    // teknik ve anlaşılmaz bir metin olur; kullanıcıya olası sebebi ve ne
+    // yapabileceğini gösteren daha açıklayıcı bir mesaj sunuyoruz.
+    const isAbort = err.name === 'AbortError';
+    const isNetwork = err instanceof TypeError; // fetch, ağ/CORS hatalarında TypeError fırlatır
+    const friendlyMessage = isAbort
+      ? 'İstek zaman aşımına uğradı. Overpass sunucusu yavaş yanıt veriyor olabilir, tekrar deneyin.'
+      : isNetwork
+      ? 'Overpass sunucusuna ulaşılamadı. İnternet bağlantınızı kontrol edin ya da birkaç saniye sonra tekrar deneyin.'
+      : err.message;
+    toast(friendlyMessage, 'error', 'POI Hatası');
   } finally {
     btn.disabled = false;
     btn.innerHTML = originalHtml;
