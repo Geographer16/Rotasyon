@@ -999,7 +999,6 @@ button:focus-visible, input:focus-visible, select:focus-visible {
           <div class="relative h-[140px]">
             <canvas id="elevation-chart"></canvas>
           </div>
-          <div id="elevation-key-notice" class="hidden"></div>
         </div>
       </section>
 
@@ -1076,14 +1075,10 @@ const ENDPOINTS = {
   ],
   elevation: 'https://api.open-elevation.com/api/v1/lookup',
   locationIq: 'https://us1.locationiq.com/v1/search',
-  gpxz: 'https://api.gpxz.io/v1/elevation/point',
 };
 
 const WATER_TAGS = new Set(['water', 'bay', 'strait', 'glacier']);
 const WATER_PLACE_TAGS = new Set(['sea', 'ocean']);
-
-// İkincil yükselti servisi (Open-Elevation başarısız/yavaş olursa devreye girer)
-const ELEVATION_FALLBACK = 'https://api.opentopodata.org/v1/srtm90m';
 
 /**
  * Arama servisi durumu.
@@ -1098,8 +1093,6 @@ const ELEVATION_FALLBACK = 'https://api.opentopodata.org/v1/srtm90m';
  */
 let locationIqApiKey = null;
 let keylessSearchFailed = false; // Photon + Nominatim ikisi de başarısız olduysa true olur
-let gpxzApiKey = null;
-let keylessElevationFailed = false; // Open-Elevation + OpenTopoData ikisi de başarısız olduysa true olur
 
 // Devre kesici: Photon art arda birkaç kez başarısız olursa (400/CORS/timeout fark etmez),
 // bu oturumda bir süre Photon'u atlayıp doğrudan Nominatim'e geçilir. Bu hem gereksiz
@@ -2690,112 +2683,192 @@ function updateFuelFormLabels() {
 }
 
 /* ============================================================
-   11. YÜKSELTİ ANALİZİ (Open-Elevation + Chart.js)
+   11. YÜKSELTİ ANALİZİ (çoklu ücretsiz sağlayıcı + Chart.js)
    ============================================================ */
 const elevationLoadingEl = document.getElementById('elevation-loading');
 const elevGainEl = document.getElementById('elev-gain');
 const elevLossEl = document.getElementById('elev-loss');
 const elevMaxEl = document.getElementById('elev-max');
 
-/** Open-Elevation'a POST isteği atar; results dizisini döner */
-async function requestOpenElevation(locations, signal) {
+/* ------------------------------------------------------------
+   Yükselti sağlayıcıları (hepsi ücretsiz + anahtarsız).
+   Her biri  [{lat, lng, elevation}]  dizisi döner ya da hata fırlatır.
+   Sıra: hızlı/güvenilir olanlar önce. Biri çökerse sonrakine geçilir.
+   ------------------------------------------------------------ */
+
+/** Diziyi n'lik parçalara böler (servislerin nokta limitleri için) */
+function chunkArray(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/** Elevasyon değeri geçerli bir sayı mı? (null / NaN / IGN'in -99999 "veri yok" değeri elenir) */
+function isValidElevation(v) {
+  return typeof v === 'number' && isFinite(v) && v > -1000;
+}
+
+/** 1) Open-Meteo Elevation — GET, 100 nokta/istek, CORS destekli, Copernicus GLO-90 */
+async function requestOpenMeteo(locations) {
+  const out = [];
+  for (const part of chunkArray(locations, 100)) {
+    const lats = part.map((l) => l.latitude.toFixed(5)).join(',');
+    const lngs = part.map((l) => l.longitude.toFixed(5)).join(',');
+    const res = await fetchWithTimeout(
+      `https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lngs}`, {}, 10000);
+    if (!res.ok) throw new Error(`Open-Meteo hata kodu: ${res.status}`);
+    const data = await res.json();
+    if (!data || !Array.isArray(data.elevation) || data.elevation.length !== part.length) {
+      throw new Error('Open-Meteo beklenmeyen yanıt formatı.');
+    }
+    part.forEach((l, i) => out.push({ lat: l.latitude, lng: l.longitude, elevation: data.elevation[i] }));
+  }
+  return out;
+}
+
+/** 2) IGN Geoplateforme — GET, 5000 nokta/istek, dünya geneli (ign_rge_alti_wld), CORS destekli */
+async function requestIgn(locations) {
+  const out = [];
+  for (const part of chunkArray(locations, 200)) {
+    const lons = part.map((l) => l.longitude.toFixed(5)).join('|');
+    const lats = part.map((l) => l.latitude.toFixed(5)).join('|');
+    const url = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json'
+      + `?lon=${lons}&lat=${lats}&resource=ign_rge_alti_wld&delimiter=%7C&indent=false&measures=false&zonly=true`;
+    const res = await fetchWithTimeout(url, {}, 12000);
+    if (!res.ok) throw new Error(`IGN hata kodu: ${res.status}`);
+    const data = await res.json();
+    if (!data || !Array.isArray(data.elevations) || data.elevations.length !== part.length) {
+      throw new Error('IGN beklenmeyen yanıt formatı.');
+    }
+    part.forEach((l, i) => out.push({ lat: l.latitude, lng: l.longitude, elevation: data.elevations[i] }));
+  }
+  return out;
+}
+
+/** 3) Open-Elevation — POST, tek istekte tüm noktalar */
+async function requestOpenElevation(locations) {
   const res = await fetchWithTimeout(ENDPOINTS.elevation, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ locations }),
-    signal,
   }, 12000);
   if (!res.ok) throw new Error(`Open-Elevation hata kodu: ${res.status}`);
   const data = await res.json();
+  if (!data || !Array.isArray(data.results)) throw new Error('Open-Elevation beklenmeyen yanıt formatı.');
   return data.results.map((r) => ({ lat: r.latitude, lng: r.longitude, elevation: r.elevation }));
 }
 
-/** Fallback: OpenTopoData SRTM90m servisi (GET, virgülle ayrılmış lat,lng listesi) */
-async function requestOpenTopoData(locations) {
-  // OpenTopoData tek istekte ~100 noktayı destekler; zaten seyreltilmiş veri kullanıyoruz.
-  const locStr = locations.map((l) => `${l.latitude},${l.longitude}`).join('|');
-  const url = `${ELEVATION_FALLBACK}?locations=${encodeURIComponent(locStr)}`;
-  const res = await fetchWithTimeout(url, {}, 15000);
-  if (!res.ok) throw new Error(`OpenTopoData hata kodu: ${res.status}`);
-  const data = await res.json();
-  if (data.status !== 'OK') throw new Error('OpenTopoData beklenmeyen yanıt: ' + data.status);
-  return data.results.map((r) => ({
-    lat: r.location.lat, lng: r.location.lng, elevation: r.elevation ?? 0,
-  }));
-}
-
-/** GPXZ /v1/elevation/point ile tek tek nokta sorgular (batch endpoint'i key olmadan test edilemediği
- * için en uyumlu/dokümante edilmiş yöntem budur). Nokta sayısı fazla olabileceğinden, aşırı istek
- * göndermemek adına GPXZ'nin toplu (batch) POST endpoint'ini tercih ediyoruz. */
-async function requestGpxz(locations, apiKey) {
-  const latlons = locations.map((l) => `${l.latitude},${l.longitude}`).join('|');
-  const url = `https://api.gpxz.io/v1/elevation/batch`;
-  const res = await fetchWithTimeout(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'x-api-key': apiKey,
-    },
-    body: `latlons=${encodeURIComponent(latlons)}`,
-  }, 15000);
-
-  if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
-      throw new Error('Geçersiz GPXZ API anahtarı (401/403).');
+/** 4-6) Open Topo Data — GET, 100 nokta/istek. dataset: srtm90m | aster30m | mapzen */
+async function requestOpenTopoData(locations, dataset) {
+  const out = [];
+  for (const part of chunkArray(locations, 100)) {
+    const locStr = part.map((l) => `${l.latitude.toFixed(5)},${l.longitude.toFixed(5)}`).join('|');
+    const url = `https://api.opentopodata.org/v1/${dataset}?locations=${encodeURIComponent(locStr)}`;
+    const res = await fetchWithTimeout(url, {}, 15000);
+    if (!res.ok) throw new Error(`OpenTopoData(${dataset}) hata kodu: ${res.status}`);
+    const data = await res.json();
+    if (data.status !== 'OK' || !Array.isArray(data.results) || data.results.length !== part.length) {
+      throw new Error(`OpenTopoData(${dataset}) beklenmeyen yanıt: ${data.status}`);
     }
-    if (res.status === 429) {
-      throw new Error('GPXZ günlük istek kotası doldu (429).');
-    }
-    throw new Error(`GPXZ hata kodu: ${res.status}`);
+    data.results.forEach((r, i) => out.push({
+      lat: part[i].latitude, lng: part[i].longitude, elevation: r.elevation,
+    }));
   }
-  const data = await res.json();
-  if (!data.results) throw new Error('GPXZ beklenmeyen yanıt formatı.');
-  return data.results.map((r) => ({ lat: r.lat, lng: r.lon, elevation: r.elevation }));
+  return out;
 }
 
-/** Yükselti servisi başarısız olduğunda gösterilen bilgilendirme + opsiyonel GPXZ key formu */
-function renderElevationKeyNotice() {
-  const container = document.getElementById('elevation-key-notice');
-  container.classList.remove('hidden');
-  container.innerHTML = `
-    <div class="glass-inset rounded-xl p-3 mt-2">
-      <div class="text-[12px] text-slate-300 leading-relaxed">
-        <i class="fa-solid fa-triangle-exclamation text-warn"></i>
-        Anahtar gerektirmeyen yükselti servislerine (Open-Elevation, OpenTopoData) şu an bu
-        tarayıcıdan erişilemiyor. Bu servislerin tarafındaki bir CORS kısıtlamasıdır.
-        Devam etmek için ücretsiz bir
-        <a href="https://www.gpxz.io/app/accounts/signup/" target="_blank" rel="noopener" style="color:#3ddc97;text-decoration:underline;">GPXZ API anahtarı</a>
-        alıp aşağıya girebilirsiniz.
-      </div>
-      <div class="flex gap-1.5 mt-2">
-        <input id="gpxz-key-input" type="text" placeholder="GPXZ API anahtarınız (ak_...)"
-               class="input-field-sm flex-1" autocomplete="off">
-        <button id="gpxz-key-save" class="btn-primary !py-0 !px-3 text-xs">Kaydet</button>
-      </div>
-    </div>
-  `;
+/** Sağlayıcı zinciri — sırayla denenir, ilk geçerli sonuç kullanılır */
+const ELEVATION_PROVIDERS = [
+  { id: 'open-meteo',    label: 'Open-Meteo',                run: (l) => requestOpenMeteo(l) },
+  { id: 'ign',           label: 'IGN Géoplateforme',         run: (l) => requestIgn(l) },
+  { id: 'open-elevation',label: 'Open-Elevation',            run: (l) => requestOpenElevation(l) },
+  { id: 'otd-srtm90',    label: 'OpenTopoData (SRTM90)',     run: (l) => requestOpenTopoData(l, 'srtm90m') },
+  { id: 'otd-aster',     label: 'OpenTopoData (ASTER)',      run: (l) => requestOpenTopoData(l, 'aster30m') },
+  { id: 'otd-mapzen',    label: 'OpenTopoData (Mapzen)',     run: (l) => requestOpenTopoData(l, 'mapzen') },
+];
 
-  document.getElementById('gpxz-key-save').addEventListener('click', () => {
-    const val = document.getElementById('gpxz-key-input').value.trim();
-    if (!val) {
-      toast('Lütfen bir API anahtarı girin.', 'info');
-      return;
-    }
-    gpxzApiKey = val;
-    try { localStorage.setItem('rotalis_gpxz_key', val); } catch (e) { /* sessizce geç */ }
-    toast('GPXZ anahtarı kaydedildi. Yükselti analizi tekrar deneniyor…', 'success');
-    if (state.routeGeoJSON) fetchElevationProfile(state.routeGeoJSON.coordinates);
+/** Başarılı olan son sağlayıcıyı hatırla: aynı oturumda tekrar başa dönüp beklemeyelim */
+let preferredElevationProviderId = null;
+
+/** Bir sağlayıcıyı çalıştırıp sonucu doğrular; geçersizse hata fırlatır. */
+async function runElevationProvider(provider, locations) {
+  const results = await provider.run(locations);
+  const validCount = results.filter((r) => isValidElevation(r.elevation)).length;
+  // Tamamı null/-99999 dönen ya da eksik dönen sağlayıcıyı kabul etme
+  if (results.length !== locations.length || validCount < results.length * 0.5) {
+    throw new Error('Sağlayıcı geçerli yükselti verisi döndürmedi.');
+  }
+  // Kısmi geçersiz noktaları en yakın geçerli komşu ile doldur
+  let lastGood = results.find((r) => isValidElevation(r.elevation)).elevation;
+  results.forEach((r) => {
+    if (isValidElevation(r.elevation)) lastGood = r.elevation;
+    else r.elevation = lastGood;
   });
+  return { results, providerId: provider.id, providerLabel: provider.label };
+}
 
-  document.getElementById('gpxz-key-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') document.getElementById('gpxz-key-save').click();
+/**
+ * İlk geçerli sonucu veren promise'i döndürür (Promise.any benzeri, eski tarayıcılarda da çalışır).
+ * Hepsi başarısız olursa null döner.
+ */
+function firstSuccessful(promises) {
+  return new Promise((resolve) => {
+    let pending = promises.length;
+    if (pending === 0) return resolve(null);
+    promises.forEach((p) => {
+      p.then(resolve).catch(() => {
+        pending -= 1;
+        if (pending === 0) resolve(null);
+      });
+    });
   });
 }
 
-function hideElevationKeyNotice() {
-  const container = document.getElementById('elevation-key-notice');
-  container.classList.add('hidden');
-  container.innerHTML = '';
+/**
+ * Yükselti verisini zincirden alır. Başarılıysa { results, providerId, providerLabel } döner,
+ * hepsi başarısızsa null döner.
+ *
+ * Strateji (bekleme süresini kısaltmak için "dalga" yarışı):
+ *   Dalga 1: Open-Meteo → hızlı ve CORS'lu; normalde tek başına yeter
+ *   Dalga 2: IGN + Open-Elevation + OpenTopoData(srtm90) → aynı anda yarışır, ilk geçerli yanıt kazanır
+ *   Dalga 3: OpenTopoData(aster, mapzen) → son çare
+ * Daha önce başarılı olmuş bir sağlayıcı varsa önce yalnızca o denenir.
+ */
+async function fetchElevationFromProviders(locations) {
+  const byId = (id) => ELEVATION_PROVIDERS.find((p) => p.id === id);
+  const attempted = new Set();
+
+  const tryWave = async (ids) => {
+    const list = ids.map(byId).filter((p) => p && !attempted.has(p.id));
+    list.forEach((p) => attempted.add(p.id));
+    const promises = list.map((p) =>
+      runElevationProvider(p, locations).catch((err) => {
+        console.warn(`Yükselti sağlayıcısı başarısız (${p.label}):`, err.message);
+        throw err;
+      })
+    );
+    const winner = await firstSuccessful(promises);
+    if (winner) preferredElevationProviderId = winner.providerId;
+    return winner;
+  };
+
+  // Daha önce çalışan sağlayıcı varsa önce onu dene (hızlı yol)
+  if (preferredElevationProviderId) {
+    const quick = await tryWave([preferredElevationProviderId]);
+    if (quick) return quick;
+    preferredElevationProviderId = null;
+  }
+
+  const waves = [
+    ['open-meteo'],                          // birincil: Copernicus GLO-90, dünya geneli, tutarlı veri
+    ['ign', 'open-elevation', 'otd-srtm90'], // yedekler: aynı anda yarışır, ilk geçerli yanıt kazanır
+    ['otd-aster', 'otd-mapzen'],             // son çare
+  ];
+  for (const wave of waves) {
+    const winner = await tryWave(wave);
+    if (winner) return winner;
+  }
+  return null;
 }
 
 async function fetchElevationProfile(coordinates) {
@@ -2803,7 +2876,6 @@ async function fetchElevationProfile(coordinates) {
   document.getElementById('elevation-chart').classList.add('opacity-0');
   const sourceNoteEl = document.getElementById('elevation-source-note');
   sourceNoteEl.classList.add('hidden');
-  hideElevationKeyNotice();
 
   // Rota her ~N. noktadan biri alınarak seyreltilir (API yükünü azaltmak için)
   const step = Math.max(1, Math.floor(coordinates.length / 120));
@@ -2813,53 +2885,21 @@ async function fetchElevationProfile(coordinates) {
   }
   const locations = sampled.map(([lng, lat]) => ({ latitude: lat, longitude: lng }));
 
-  let rawResults = null;
-  let usedSource = 'open-elevation';
+  const fetched = await fetchElevationFromProviders(locations);
 
-  // 1) Open-Elevation dene
-  try {
-    rawResults = await requestOpenElevation(locations);
-  } catch (primaryErr) {
-    console.warn('Open-Elevation başarısız, OpenTopoData deneniyor:', primaryErr.message);
-
-    // 2) OpenTopoData dene
-    try {
-      rawResults = await requestOpenTopoData(locations);
-      usedSource = 'opentopodata';
-    } catch (fallbackErr) {
-      console.warn('OpenTopoData da başarısız:', fallbackErr.message);
-
-      // 3) Daha önce GPXZ key girildiyse onunla dene
-      if (gpxzApiKey) {
-        try {
-          rawResults = await requestGpxz(locations, gpxzApiKey);
-          usedSource = 'gpxz';
-        } catch (gpxzErr) {
-          console.error('GPXZ de başarısız:', gpxzErr.message);
-          toast('GPXZ anahtarınızla da yükselti verisi alınamadı: ' + gpxzErr.message, 'error', 'Yükselti Hatası');
-          elevGainEl.textContent = '—';
-          elevLossEl.textContent = '—';
-          elevMaxEl.textContent = '—';
-          elevationLoadingEl.classList.add('hidden');
-          document.getElementById('elevation-chart').classList.remove('opacity-0');
-          renderElevationKeyNotice();
-          return;
-        }
-      } else {
-        // 4) Hiçbir anahtarsız servis çalışmadı ve key de girilmemiş
-        toast('Anahtarsız yükselti servislerine ulaşılamadı. Devam etmek için opsiyonel bir GPXZ anahtarı girebilirsiniz.', 'error', 'Yükselti Hatası');
-        elevGainEl.textContent = '—';
-        elevLossEl.textContent = '—';
-        elevMaxEl.textContent = '—';
-        elevationLoadingEl.classList.add('hidden');
-        document.getElementById('elevation-chart').classList.remove('opacity-0');
-        renderElevationKeyNotice();
-        return;
-      }
-    }
+  if (!fetched) {
+    // Hiçbir ücretsiz servis yanıt vermedi
+    toast('Sunucudan yanıt alınamadı.', 'error', 'Yükselti Hatası');
+    elevGainEl.textContent = '—';
+    elevLossEl.textContent = '—';
+    elevMaxEl.textContent = '—';
+    elevationLoadingEl.classList.add('hidden');
+    document.getElementById('elevation-chart').classList.remove('opacity-0');
+    return;
   }
 
   try {
+    const rawResults = fetched.results;
     let cumulativeDist = 0;
     const points = rawResults.map((r, i) => {
       if (i > 0) {
@@ -2872,9 +2912,12 @@ async function fetchElevationProfile(coordinates) {
     renderElevationChart(points);
     computeElevationMetrics(points);
 
-    if (usedSource !== 'open-elevation') {
-      const labels = { opentopodata: 'OpenTopoData (yedek)', gpxz: 'GPXZ (API anahtarınızla)' };
-      sourceNoteEl.textContent = `ℹ Open-Elevation yanıt vermedi, ${labels[usedSource]} kullanıldı.`;
+    // Kaynak notu (Open-Meteo veri lisansı gereği atıf da burada)
+    if (fetched.providerId === 'open-meteo') {
+      sourceNoteEl.textContent = 'Yükselti verisi: Open-Meteo (Copernicus DEM)';
+      sourceNoteEl.classList.remove('hidden');
+    } else {
+      sourceNoteEl.textContent = `Yükselti verisi: ${fetched.providerLabel}`;
       sourceNoteEl.classList.remove('hidden');
     }
   } finally {
@@ -3589,12 +3632,10 @@ function init() {
     openDrawer();
   }
 
-  // Daha önce girilmiş bir LocationIQ / GPXZ anahtarı varsa geri yükle (yedekleme zincirleri için)
+  // Daha önce girilmiş bir LocationIQ anahtarı varsa geri yükle (arama yedek zinciri için)
   try {
     const savedLocationIqKey = localStorage.getItem('rotalis_locationiq_key');
     if (savedLocationIqKey) locationIqApiKey = savedLocationIqKey;
-    const savedGpxzKey = localStorage.getItem('rotalis_gpxz_key');
-    if (savedGpxzKey) gpxzApiKey = savedGpxzKey;
   } catch (e) { /* localStorage erişilemezse sessizce geç */ }
 
   // Öncelik: URL'de paylaşılan bir rota varsa onu yükle; yoksa son oturumu localStorage'dan geri getir.
