@@ -955,7 +955,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 
           <!-- Ortalama fiyatı otomatik doldur -->
           <button id="btn-fetch-avg-price" class="btn-secondary text-xs w-full">
-            <i class="fa-solid fa-rotate"></i> <span id="btn-fetch-avg-price-label">Türkiye Ortalamasını Getir</span>
+            <i class="fa-solid fa-rotate"></i> <span id="btn-fetch-avg-price-label">Rotaya Göre Ortalamayı Getir</span>
           </button>
           <p id="fuel-price-source-note" class="text-[10px] text-slate-500 leading-relaxed"></p>
 
@@ -969,6 +969,23 @@ button:focus-visible, input:focus-visible, select:focus-visible {
               <div class="text-lg font-display font-bold text-accent"><span id="fuel-cost">0</span></div>
               <div class="text-[10.5px] text-slate-500">Tahmini Maliyet</div>
             </div>
+          </div>
+
+          <!-- Eğim (yükselti) etkisi: yükselti verisi geldiğinde ayrı satır olarak gösterilir -->
+          <div id="grade-effect-row" class="hidden pt-2 border-t border-border/60">
+            <div class="flex items-center justify-between">
+              <div class="text-[11px] text-slate-400 flex items-center gap-1.5">
+                <i class="fa-solid fa-mountain text-[10px]"></i>
+                Eğim etkisi (tahmini)
+              </div>
+              <div class="text-sm font-display font-semibold text-amber-400">
+                +<span id="grade-effect-liters">0</span> L
+                <span class="text-slate-500 font-normal">(<span id="grade-effect-percent">0</span>%)</span>
+              </div>
+            </div>
+            <p class="text-[10px] text-slate-500 leading-relaxed mt-1">
+              Yol eğiminin (tırmanış/iniş) yakıta etkisi; fizik tabanlı kaba bir tahmindir, gerçek değerler araca ve sürüşe göre değişir.
+            </p>
           </div>
         </div>
       </section>
@@ -2533,6 +2550,8 @@ function clearRouteVisuals() {
   state.routeAlternatives = [];
   state.selectedRouteIndex = 0;
   if (elevationChart) { elevationChart.destroy(); elevationChart = null; }
+  const gradeEffectRow = document.getElementById('grade-effect-row');
+  if (gradeEffectRow) gradeEffectRow.classList.add('hidden');
   saveSessionToStorage();
 }
 
@@ -2572,24 +2591,125 @@ const btnFetchAvgPriceLabel = document.getElementById('btn-fetch-avg-price-label
 const fuelPriceSourceNote = document.getElementById('fuel-price-source-note');
 
 /**
- * Yakıt türüne göre Türkiye ortalaması referans değerleri.
+ * Yakıt türüne göre il bazlı referans fiyatları.
  *
- * ÖNEMLİ NOT: Türkiye'de akaryakıt fiyatları için ücretsiz, anahtarsız ve
- * tarayıcıdan (CORS) doğrudan çağrılabilen resmi/canlı bir API bulunmuyor
- * (EPDK gibi kurumlar canlı bir API yayınlamıyor, çoğu üçüncü parti servis
- * ücretli anahtar istiyor). Bu yüzden "otomatik çek" butonu, gerçek zamanlı
- * bir sunucudan veri çekmek yerine, burada tanımlı ve elle güncellenebilen
- * referans ortalamalarını forma yazar. Değerler tahminidir; kesin fiyat için
- * güncel bir kaynağı kontrol edin.
+ * Kaynak: Petrol Ofisi (BP) il bazlı akaryakıt fiyat listesi, kullanıcı tarafından
+ * elle sağlanmıştır. EPDK'nın kendisi yalnızca SOAP/XML tabanlı bir web servisi
+ * sunuyor; bu tür servisler tarayıcıdan doğrudan (CORS ile) çağrılamaz, bir sunucu
+ * ara katmanı gerektirir. Bu site tamamen istemci tarafında çalıştığı için ne EPDK'dan
+ * ne de üçüncü parti bir canlı API'den güvenilir şekilde otomatik okuma yapılamıyor.
  *
- * REFERENCE_PRICES_UPDATED_AT değerini güncellediğinizde price alanlarını da
- * güncel Türkiye ortalamasıyla değiştirin.
+ * Bu yüzden fiyatlar burada sabit bir tabloda tutulur ve zaman zaman elle güncellenir.
+ * "Rotaya Göre Ortalamayı Getir" butonu, çizilen rotanın en yakın geçtiği illeri bulup
+ * o illerin fiyatlarının ortalamasını alır (bkz. FUEL_CITY_PRICES ve
+ * findCitiesAlongRoute). Rota yoksa Türkiye geneli ortalamaya (AVG_FUEL_PRICES) düşer.
+ *
+ * GÜNCELLEME NASIL YAPILIR: Yeni bir Petrol Ofisi listesi geldiğinde, aşağıdaki
+ * FUEL_CITY_PRICES dizisindeki benzin/motorin/lpg değerlerini güncelleyin ve
+ * REFERENCE_PRICES_UPDATED_AT tarihini bugüne çekin.
  */
-const REFERENCE_PRICES_UPDATED_AT = '2026-01'; // YYYY-AA — referans fiyatların ait olduğu dönem
+const REFERENCE_PRICES_UPDATED_AT = '2026-09'; // YYYY-AA — referans fiyatların ait olduğu dönem
+
+// İl merkezi koordinatı + o ile ait güncel akaryakıt fiyatları (₺/L).
+// İstanbul iki ayrı yaka olarak tutulur (Petrol Ofisi listesi de öyle veriyor).
+const FUEL_CITY_PRICES = [
+  { name: 'İstanbul (Avrupa)', lat: 41.01, lng: 28.9603, benzin: 80.40, motorin: 96.30, lpg: 34.99 },
+  { name: 'İstanbul (Anadolu)', lat: 40.9909, lng: 29.1244, benzin: 80.20, motorin: 96.10, lpg: 34.40 },
+  { name: 'Ankara', lat: 39.9334, lng: 32.8597, benzin: 81.30, motorin: 97.40, lpg: 35.09 },
+  { name: 'İzmir', lat: 38.4237, lng: 27.1428, benzin: 81.60, motorin: 97.70, lpg: 34.99 },
+  { name: 'Adana', lat: 37.0000, lng: 35.3213, benzin: 82.20, motorin: 98.30, lpg: 35.41 },
+  { name: 'Adıyaman', lat: 37.7648, lng: 38.2786, benzin: 82.60, motorin: 98.60, lpg: 35.64 },
+  { name: 'Afyon', lat: 38.7507, lng: 30.5567, benzin: 82.60, motorin: 98.70, lpg: 35.04 },
+  { name: 'Ağrı', lat: 39.7191, lng: 43.0503, benzin: 82.90, motorin: 99.00, lpg: 36.99 },
+  { name: 'Aksaray', lat: 38.3687, lng: 34.0360, benzin: 82.30, motorin: 98.30, lpg: 35.09 },
+  { name: 'Amasya', lat: 40.6499, lng: 35.8353, benzin: 82.00, motorin: 98.00, lpg: 35.59 },
+  { name: 'Antalya', lat: 36.8969, lng: 30.7133, benzin: 82.60, motorin: 98.70, lpg: 35.24 },
+  { name: 'Ardahan', lat: 41.1105, lng: 42.7022, benzin: 82.40, motorin: 98.50, lpg: 35.99 },
+  { name: 'Artvin', lat: 41.1828, lng: 41.8183, benzin: 82.20, motorin: 98.30, lpg: 36.49 },
+  { name: 'Aydın', lat: 37.8560, lng: 27.8416, benzin: 81.80, motorin: 97.90, lpg: 35.14 },
+  { name: 'Balıkesir', lat: 39.6484, lng: 27.8826, benzin: 81.90, motorin: 98.00, lpg: 34.50 },
+  { name: 'Bartın', lat: 41.6344, lng: 32.3375, benzin: 81.60, motorin: 97.50, lpg: 34.99 },
+  { name: 'Batman', lat: 37.8812, lng: 41.1351, benzin: 82.80, motorin: 99.00, lpg: 35.94 },
+  { name: 'Bayburt', lat: 40.2552, lng: 40.2249, benzin: 82.10, motorin: 98.20, lpg: 36.29 },
+  { name: 'Bilecik', lat: 40.1451, lng: 29.9799, benzin: 81.30, motorin: 97.20, lpg: 34.39 },
+  { name: 'Bingöl', lat: 38.8846, lng: 40.4939, benzin: 82.90, motorin: 99.10, lpg: 36.09 },
+  { name: 'Bitlis', lat: 38.3938, lng: 42.1232, benzin: 82.90, motorin: 99.10, lpg: 35.71 },
+  { name: 'Bolu', lat: 40.5760, lng: 31.5788, benzin: 81.30, motorin: 97.20, lpg: 34.79 },
+  { name: 'Burdur', lat: 37.7203, lng: 30.2908, benzin: 82.40, motorin: 98.50, lpg: 35.19 },
+  { name: 'Bursa', lat: 40.1826, lng: 29.0665, benzin: 81.40, motorin: 97.30, lpg: 34.39 },
+  { name: 'Çanakkale', lat: 40.1553, lng: 26.4142, benzin: 82.00, motorin: 98.10, lpg: 34.59 },
+  { name: 'Çankırı', lat: 40.6013, lng: 33.6134, benzin: 81.70, motorin: 97.80, lpg: 35.29 },
+  { name: 'Çorum', lat: 40.5506, lng: 34.9556, benzin: 81.90, motorin: 98.00, lpg: 35.19 },
+  { name: 'Denizli', lat: 37.7765, lng: 29.0864, benzin: 82.10, motorin: 98.20, lpg: 34.89 },
+  { name: 'Diyarbakır', lat: 37.9144, lng: 40.2306, benzin: 82.80, motorin: 99.00, lpg: 36.06 },
+  { name: 'Düzce', lat: 40.8438, lng: 31.1565, benzin: 81.20, motorin: 97.10, lpg: 34.79 },
+  { name: 'Edirne', lat: 41.6771, lng: 26.5557, benzin: 81.40, motorin: 97.50, lpg: 35.09 },
+  { name: 'Elazığ', lat: 38.6810, lng: 39.2264, benzin: 83.00, motorin: 99.10, lpg: 35.61 },
+  { name: 'Erzincan', lat: 39.7500, lng: 39.5000, benzin: 82.30, motorin: 98.40, lpg: 36.49 },
+  { name: 'Erzurum', lat: 39.9000, lng: 41.2700, benzin: 82.40, motorin: 98.50, lpg: 36.19 },
+  { name: 'Eskişehir', lat: 39.7767, lng: 30.5206, benzin: 81.60, motorin: 97.50, lpg: 34.50 },
+  { name: 'Gaziantep', lat: 37.0662, lng: 37.3833, benzin: 82.30, motorin: 98.30, lpg: 35.21 },
+  { name: 'Giresun', lat: 40.9128, lng: 38.3895, benzin: 82.20, motorin: 98.30, lpg: 35.79 },
+  { name: 'Gümüşhane', lat: 40.4386, lng: 39.5086, benzin: 82.10, motorin: 98.20, lpg: 35.79 },
+  { name: 'Hakkari', lat: 37.5744, lng: 43.7408, benzin: 82.90, motorin: 99.10, lpg: 36.77 },
+  { name: 'Hatay', lat: 36.4018, lng: 36.3498, benzin: 82.00, motorin: 98.10, lpg: 35.31 },
+  { name: 'Iğdır', lat: 39.9167, lng: 44.0333, benzin: 82.90, motorin: 99.00, lpg: 36.99 },
+  { name: 'Isparta', lat: 37.7648, lng: 30.5566, benzin: 82.50, motorin: 98.60, lpg: 35.14 },
+  { name: 'Kahramanmaraş', lat: 37.5858, lng: 36.9371, benzin: 82.40, motorin: 98.40, lpg: 35.34 },
+  { name: 'Karabük', lat: 41.2061, lng: 32.6204, benzin: 81.70, motorin: 97.60, lpg: 34.79 },
+  { name: 'Karaman', lat: 37.1759, lng: 33.2287, benzin: 82.20, motorin: 98.30, lpg: 35.61 },
+  { name: 'Kars', lat: 40.6013, lng: 43.0975, benzin: 82.40, motorin: 98.50, lpg: 36.09 },
+  { name: 'Kastamonu', lat: 41.3887, lng: 33.7827, benzin: 82.10, motorin: 98.20, lpg: 35.79 },
+  { name: 'Kayseri', lat: 38.7312, lng: 35.4787, benzin: 82.30, motorin: 98.40, lpg: 35.09 },
+  { name: 'Kilis', lat: 36.7184, lng: 37.1212, benzin: 82.10, motorin: 98.10, lpg: 35.61 },
+  { name: 'Kırıkkale', lat: 39.8468, lng: 33.5153, benzin: 81.60, motorin: 97.70, lpg: 34.99 },
+  { name: 'Kırklareli', lat: 41.7333, lng: 27.2167, benzin: 81.40, motorin: 97.50, lpg: 34.99 },
+  { name: 'Kırşehir', lat: 39.1425, lng: 34.1709, benzin: 81.60, motorin: 97.70, lpg: 34.99 },
+  { name: 'Kocaeli', lat: 40.8533, lng: 29.8815, benzin: 80.70, motorin: 96.60, lpg: 34.19 },
+  { name: 'Konya', lat: 37.8746, lng: 32.4932, benzin: 82.30, motorin: 98.50, lpg: 35.09 },
+  { name: 'Kütahya', lat: 39.4167, lng: 29.9833, benzin: 82.30, motorin: 98.20, lpg: 35.14 },
+  { name: 'Malatya', lat: 38.3552, lng: 38.3095, benzin: 82.60, motorin: 98.60, lpg: 35.57 },
+  { name: 'Manisa', lat: 38.6191, lng: 27.4289, benzin: 81.70, motorin: 97.80, lpg: 35.04 },
+  { name: 'Mardin', lat: 37.3212, lng: 40.7245, benzin: 82.80, motorin: 99.00, lpg: 35.74 },
+  { name: 'Mersin', lat: 36.8000, lng: 34.6333, benzin: 82.20, motorin: 98.30, lpg: 35.71 },
+  { name: 'Muğla', lat: 37.2153, lng: 28.3636, benzin: 82.10, motorin: 98.20, lpg: 35.04 },
+  { name: 'Muş', lat: 38.9462, lng: 41.7539, benzin: 82.90, motorin: 99.10, lpg: 36.08 },
+  { name: 'Nevşehir', lat: 38.6939, lng: 34.6857, benzin: 82.20, motorin: 98.30, lpg: 35.09 },
+  { name: 'Niğde', lat: 37.9667, lng: 34.6833, benzin: 82.20, motorin: 98.30, lpg: 34.79 },
+  { name: 'Ordu', lat: 40.9839, lng: 37.8764, benzin: 82.00, motorin: 98.00, lpg: 35.39 },
+  { name: 'Osmaniye', lat: 37.0742, lng: 36.2478, benzin: 82.00, motorin: 98.10, lpg: 35.84 },
+  { name: 'Rize', lat: 41.0201, lng: 40.5234, benzin: 82.10, motorin: 98.20, lpg: 35.79 },
+  { name: 'Sakarya', lat: 40.7569, lng: 30.3781, benzin: 81.00, motorin: 96.90, lpg: 34.29 },
+  { name: 'Samsun', lat: 41.2867, lng: 36.3300, benzin: 82.00, motorin: 98.00, lpg: 35.39 },
+  { name: 'Şanlıurfa', lat: 37.1591, lng: 38.7969, benzin: 82.50, motorin: 98.50, lpg: 35.59 },
+  { name: 'Siirt', lat: 37.9333, lng: 41.9500, benzin: 82.80, motorin: 99.10, lpg: 35.84 },
+  { name: 'Sinop', lat: 42.0231, lng: 35.1531, benzin: 81.90, motorin: 98.00, lpg: 35.69 },
+  { name: 'Şırnak', lat: 37.5164, lng: 42.4611, benzin: 82.90, motorin: 99.10, lpg: 36.15 },
+  { name: 'Sivas', lat: 39.7477, lng: 37.0179, benzin: 82.40, motorin: 98.50, lpg: 35.49 },
+  { name: 'Tekirdağ', lat: 40.9833, lng: 27.5167, benzin: 81.00, motorin: 97.10, lpg: 34.79 },
+  { name: 'Tokat', lat: 40.3167, lng: 36.5500, benzin: 82.00, motorin: 98.00, lpg: 35.79 },
+  { name: 'Trabzon', lat: 41.0027, lng: 39.7168, benzin: 82.10, motorin: 98.20, lpg: 35.79 },
+  { name: 'Tunceli', lat: 39.3074, lng: 39.4388, benzin: 82.90, motorin: 99.00, lpg: 36.51 },
+  { name: 'Uşak', lat: 38.6823, lng: 29.4082, benzin: 82.10, motorin: 98.20, lpg: 35.15 },
+  { name: 'Van', lat: 38.4891, lng: 43.4089, benzin: 82.90, motorin: 99.00, lpg: 36.11 },
+  { name: 'Yalova', lat: 40.6500, lng: 29.2667, benzin: 81.00, motorin: 96.90, lpg: 34.29 },
+  { name: 'Yozgat', lat: 39.8181, lng: 34.8147, benzin: 82.00, motorin: 98.10, lpg: 35.19 },
+  { name: 'Zonguldak', lat: 41.4564, lng: 31.7987, benzin: 81.60, motorin: 97.50, lpg: 35.09 },
+];
+
+// Türkiye geneli ortalama (rota yokken veya il tespiti başarısız olduğunda kullanılır);
+// FUEL_CITY_PRICES üzerinden otomatik hesaplanır, elle senkronize tutmaya gerek kalmaz.
+const AVG_FUEL_PRICES = (() => {
+  const sums = { benzin: 0, motorin: 0, lpg: 0 };
+  FUEL_CITY_PRICES.forEach((c) => { sums.benzin += c.benzin; sums.motorin += c.motorin; sums.lpg += c.lpg; });
+  const n = FUEL_CITY_PRICES.length;
+  return { benzin: sums.benzin / n, motorin: sums.motorin / n, lpg: sums.lpg / n };
+})();
+
 const FUEL_TYPES = {
-  benzin: { label: 'Benzin', icon: 'fa-gas-pump', avgPrice: 52.5, defaultConsumption: 7.5 },
-  motorin: { label: 'Motorin', icon: 'fa-truck-fast', avgPrice: 50.5, defaultConsumption: 6.5 },
-  lpg: { label: 'LPG', icon: 'fa-fire-flame-simple', avgPrice: 27.5, defaultConsumption: 9.0 },
+  benzin: { label: 'Benzin', icon: 'fa-gas-pump', avgPrice: AVG_FUEL_PRICES.benzin, defaultConsumption: 7.5 },
+  motorin: { label: 'Motorin', icon: 'fa-truck-fast', avgPrice: AVG_FUEL_PRICES.motorin, defaultConsumption: 6.5 },
+  lpg: { label: 'LPG', icon: 'fa-fire-flame-simple', avgPrice: AVG_FUEL_PRICES.lpg, defaultConsumption: 9.0 },
 };
 let currentFuelType = 'benzin';
 
@@ -2600,7 +2720,7 @@ document.querySelectorAll('.fuel-type-btn').forEach((btn) => {
     btn.classList.add('active');
     // Tür değişince, henüz kullanıcı tarafından elle değiştirilmemiş gibi
     // davranıp o türün varsayılan tüketimini öneriyoruz; fiyatı olduğu gibi
-    // bırakıyoruz ki kullanıcı "Türkiye Ortalamasını Getir" ile bilinçli
+    // bırakıyoruz ki kullanıcı "Rotaya Göre Ortalamayı Getir" ile bilinçli
     // şekilde güncellesin.
     if (state.unitSystem !== 'imperial') {
       inputConsumption.value = FUEL_TYPES[currentFuelType].defaultConsumption;
@@ -2614,26 +2734,99 @@ document.querySelectorAll('.fuel-type-btn').forEach((btn) => {
   el.addEventListener('input', updateFuelCalculation);
 });
 
-/** "Türkiye Ortalamasını Getir" — bkz. yukarıdaki not: canlı bir API yerine
- * güncel tutulan referans ortalama değerini forma yazar. */
+/**
+ * Verilen rota koordinatlarının (GeoJSON [lng, lat] dizisi) en yakın geçtiği
+ * illeri bulur. Rota belirli aralıklarla örneklenir (performans için tamamı
+ * değil), her örnek noktaya en yakın il "en yakın komşu" mantığıyla (basit
+ * kuş uçuşu mesafe) bulunur, sonra tekrarsız bir il listesi döner.
+ *
+ * Bu tamamen yerel bir hesaplamadır — ağ isteği gerektirmez, anında çalışır.
+ * İl sınırları yerine il MERKEZİNE en yakınlık kullanıldığı için sınıra yakın
+ * geçişlerde küçük hatalar olabilir; amaç kesin sınır tespiti değil, rotanın
+ * kabaca hangi bölgelerden geçtiğine dair makul bir tahmindir.
+ */
+function findCitiesAlongRoute(coordinates, maxSamples = 40) {
+  if (!coordinates || coordinates.length === 0) return [];
+
+  const step = Math.max(1, Math.floor(coordinates.length / maxSamples));
+  const sampled = [];
+  for (let i = 0; i < coordinates.length; i += step) sampled.push(coordinates[i]);
+  if (sampled[sampled.length - 1] !== coordinates[coordinates.length - 1]) {
+    sampled.push(coordinates[coordinates.length - 1]);
+  }
+
+  const seen = new Set();
+  const cities = [];
+  sampled.forEach(([lng, lat]) => {
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (const city of FUEL_CITY_PRICES) {
+      const d = haversineMeters(lat, lng, city.lat, city.lng);
+      if (d < nearestDist) { nearestDist = d; nearest = city; }
+    }
+    if (nearest && !seen.has(nearest.name)) {
+      seen.add(nearest.name);
+      cities.push(nearest);
+    }
+  });
+  return cities;
+}
+
+/**
+ * Rotanın geçtiği illere göre seçili yakıt türünün ortalama fiyatını hesaplar.
+ * Rota yoksa veya il tespiti başarısız olursa Türkiye geneli ortalamaya döner.
+ * Dönen nesne: { price, cityNames, isRouteBased }
+ */
+function computeRouteFuelPrice() {
+  const fallback = { price: FUEL_TYPES[currentFuelType].avgPrice, cityNames: [], isRouteBased: false };
+  if (!state.routeGeoJSON || !state.routeGeoJSON.coordinates || !state.routeGeoJSON.coordinates.length) {
+    return fallback;
+  }
+
+  const cities = findCitiesAlongRoute(state.routeGeoJSON.coordinates);
+  if (!cities.length) return fallback;
+
+  const sum = cities.reduce((acc, c) => acc + c[currentFuelType], 0);
+  const price = sum / cities.length;
+  return { price, cityNames: cities.map((c) => c.name), isRouteBased: true };
+}
+
+/**
+ * "Rotaya Göre Ortalamayı Getir" — çizilen rotanın geçtiği illeri bulup o illerin
+ * fiyat ortalamasını forma yazar. Rota yoksa Türkiye geneli ortalama kullanılır.
+ * Tamamen yerel hesaplama; ağ isteği yok, anında sonuç verir.
+ */
 btnFetchAvgPrice.addEventListener('click', () => {
   const original = btnFetchAvgPriceLabel.textContent;
   btnFetchAvgPrice.disabled = true;
-  btnFetchAvgPriceLabel.textContent = 'Getiriliyor…';
+  btnFetchAvgPriceLabel.textContent = 'Hesaplanıyor…';
 
-  // Gerçek bir ağ isteği yok (bkz. not); kısa bir gecikme sadece "işlem yapılıyor"
-  // hissini vermek ve ani değer değişimini kullanıcıya fark ettirmek için.
   setTimeout(() => {
-    if (inputCurrency.value === '₺') {
-      inputFuelPrice.value = FUEL_TYPES[currentFuelType].avgPrice;
-      updateFuelCalculation();
-      toast(`${FUEL_TYPES[currentFuelType].label} için Türkiye ortalaması dolduruldu.`, 'success');
-    } else {
+    if (inputCurrency.value !== '₺') {
       toast('Ortalama fiyat şu an yalnızca ₺ (TL) cinsinden mevcut. Lütfen para birimini ₺ yapın.', 'info');
+      btnFetchAvgPrice.disabled = false;
+      btnFetchAvgPriceLabel.textContent = original;
+      return;
     }
+
+    const result = computeRouteFuelPrice();
+    inputFuelPrice.value = result.price.toFixed(2);
+    updateFuelCalculation();
+
+    if (result.isRouteBased) {
+      const cityList = result.cityNames.length > 3
+        ? `${result.cityNames.slice(0, 3).join(', ')} +${result.cityNames.length - 3} il`
+        : result.cityNames.join(', ');
+      fuelPriceSourceNote.textContent = `Rotanın geçtiği illere göre ortalama (${cityList}) — Petrol Ofisi ${REFERENCE_PRICES_UPDATED_AT} listesine dayanır, tahminidir.`;
+      toast(`${FUEL_TYPES[currentFuelType].label} için rota illerine göre ortalama dolduruldu.`, 'success');
+    } else {
+      fuelPriceSourceNote.textContent = `Rota çizilmediği için Türkiye geneli ortalama kullanıldı — Petrol Ofisi ${REFERENCE_PRICES_UPDATED_AT} listesine dayanır, tahminidir.`;
+      toast(`${FUEL_TYPES[currentFuelType].label} için Türkiye ortalaması dolduruldu.`, 'info');
+    }
+
     btnFetchAvgPrice.disabled = false;
     btnFetchAvgPriceLabel.textContent = original;
-  }, 450);
+  }, 150);
 });
 
 function updateFuelCalculation() {
@@ -2657,6 +2850,90 @@ function updateFuelCalculation() {
 
   const cost = liters * price;
   fuelCostEl.textContent = `${currency}${cost.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}`;
+
+  // Yükselti verisi zaten geldiyse eğim etkisini de güncelle
+  updateGradeEffect();
+}
+
+/* ------------------------------------------------------------
+   Eğim (yükselti) etkisi — fizik tabanlı kaba tahmin.
+   Ayrı bir satırda gösterilir, ana yakıt rakamına KARIŞTIRILMAZ.
+
+   Model (kaynaklar: yol yükü denklemi F = mg·sinθ + mg·Cr·cosθ + ½ρCdAv²;
+   Yan, Dong & Xu 2020, Sustainability 12(5):2028; Boriboonsomsin & Barth 2009):
+     - Tırmanışta motor ekstra potansiyel enerjiyi (m·g·Δh_yukarı) karşılar.
+       Bu enerji motorun ortalama tank-to-wheel verimine (~%22) bölünüp
+       yakıtın enerji yoğunluğuna (~34.8 MJ/L, benzin LHV) bölünerek litreye çevrilir.
+     - İnişte yerçekimi enerjiyi geri verir ama motor freni / vites direnci / güvenlik
+       frenlemesi yüzünden tam geri kazanım olmaz. Alan çalışmaları (Yan et al. 2020)
+       inişte net tüketimin sıfıra yakın ama negatif olmadığını gösteriyor; bu yüzden
+       inişin geri kazanımını "kısmi telafi" olarak tırmanış maliyetinden düşüyoruz,
+       ayrı bir eksi kalem olarak göstermiyoruz (motor rölantinin altına inemez).
+   Bu KESİN bir değer değil; aracın ağırlığına, rüzgara ve sürüşe göre değişir.
+   ------------------------------------------------------------ */
+const GRADE_PHYSICS = {
+  g: 9.81,                    // yerçekimi ivmesi (m/s²)
+  engineEfficiency: 0.22,     // ortalama benzinli motorun tank-to-wheel verimi (~%20-30 aralığının ortası)
+  fuelEnergyDensity: 34.8e6,  // benzinin ortalama alt ısıl değeri (J/L) — LHV ortalaması
+  downhillRecovery: 0.55,     // inişte potansiyel enerjinin tırmanış maliyetini telafi oranı (tam değil, kısmi)
+};
+
+// Yakıt/km oranından kabaca araç ağırlığı tahmini (kg) — kullanıcı ağırlık girmediği için
+// tipik binek araç kütlesine (~1400 kg, yolcu+yük dahil) sabitliyoruz.
+const ASSUMED_VEHICLE_MASS_KG = 1400;
+
+function updateGradeEffect() {
+  const row = document.getElementById('grade-effect-row');
+  const points = state.elevationPoints;
+  if (!row) return;
+
+  if (!points || points.length < 2 || !state.totalDistanceKm) {
+    row.classList.add('hidden');
+    return;
+  }
+
+  let ascent = 0;   // toplam tırmanış (m) — computeElevationMetrics ile tutarlı olsun diye burada da hesaplanıyor
+  let descent = 0;  // toplam iniş (m)
+  for (let i = 1; i < points.length; i++) {
+    const diff = points[i].elevation - points[i - 1].elevation;
+    if (diff > 0) ascent += diff;
+    else descent += -diff;
+  }
+
+  if (ascent < 1 && descent < 1) {
+    row.classList.add('hidden');
+    return; // düz rota, gösterecek bir şey yok
+  }
+
+  const { g, engineEfficiency, fuelEnergyDensity, downhillRecovery } = GRADE_PHYSICS;
+  const m = ASSUMED_VEHICLE_MASS_KG;
+
+  // Tırmanış için gereken ekstra enerji (J): potansiyel enerji / motor verimi
+  const climbEnergyJ = (m * g * ascent) / engineEfficiency;
+  // İnişte yerçekimin sağladığı enerjinin bir kısmı tırmanış maliyetini telafi eder
+  const recoveredEnergyJ = (m * g * descent) / engineEfficiency * downhillRecovery;
+
+  const netExtraEnergyJ = Math.max(0, climbEnergyJ - recoveredEnergyJ);
+  const extraLiters = netExtraEnergyJ / fuelEnergyDensity;
+
+  // Ana yakıt hesabındaki litre miktarına göre yüzde (imperyal ise galonu litreye çevirip kıyasla)
+  const consumption = parseFloat(inputConsumption.value) || 0;
+  let baseLiters;
+  if (state.unitSystem === 'imperial') {
+    const totalMiles = (state.totalDistanceKm * 1000) / 1609.344;
+    const gallons = consumption > 0 ? totalMiles / consumption : 0;
+    baseLiters = gallons * 3.78541;
+  } else {
+    baseLiters = (state.totalDistanceKm * consumption) / 100;
+  }
+
+  const percent = baseLiters > 0 ? (extraLiters / baseLiters) * 100 : 0;
+
+  const displayLiters = state.unitSystem === 'imperial' ? extraLiters / 3.78541 : extraLiters;
+  document.getElementById('grade-effect-liters').textContent = displayLiters.toFixed(displayLiters < 1 ? 2 : 1);
+  document.getElementById('grade-effect-percent').textContent = percent.toFixed(0);
+
+  row.classList.remove('hidden');
 }
 
 /** Birim sistemi değişince yakıt formundaki etiketleri ve birim sembolünü günceller */
@@ -2911,6 +3188,7 @@ async function fetchElevationProfile(coordinates) {
     state.elevationPoints = points;
     renderElevationChart(points);
     computeElevationMetrics(points);
+    updateGradeEffect();
 
     // Kaynak notu (Open-Meteo veri lisansı gereği atıf da burada)
     if (fetched.providerId === 'open-meteo') {
