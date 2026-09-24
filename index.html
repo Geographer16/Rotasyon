@@ -805,6 +805,12 @@ button:focus-visible, input:focus-visible, select:focus-visible {
       <button data-layer="osm" class="layer-btn active" title="Standart Harita"><i class="fa-solid fa-map"></i></button>
       <button data-layer="topo" class="layer-btn" title="Topoğrafik Harita"><i class="fa-solid fa-mountain-sun"></i></button>
     </div>
+    <button id="btn-toggle-recommendations" type="button"
+      class="glass-card rounded-2xl px-3 py-2 flex items-center gap-2 text-xs font-semibold text-amber-300 hover:text-amber-200 transition-colors"
+      title="Topsakal'dan Tavsiyeler'i göster/gizle">
+      <i class="fa-solid fa-star"></i>
+      <span>Tavsiyeler</span>
+    </button>
   </div>
 
   <!-- Harita üstü sağ alt: aksiyon butonları (GPX / Paylaş) -->
@@ -1872,11 +1878,18 @@ const ADMIN_AUTH_STORAGE_KEY = 'rotalis_admin_github_auth_v1';
 const ADMIN_PUBLIC_REPO_STORAGE_KEY = 'rotalis_public_repo_v1'; // herkese açık okuma için repo bilgisi (token içermez)
 const POI_FILE_PATH = 'pois.json';
 
+// Tüm admin POI'leri artık tek bir başlık altında toplanıyor: "Topsakal'dan Tavsiyeler".
+// Alt tipler (fuel/restaurant/hotel) yalnızca ikon/renk seçimi için tutuluyor;
+// haritada tek bir katman olarak gösterilip tek bir düğmeyle açılıp kapatılıyorlar.
+const ADMIN_RECOMMENDATIONS_TITLE = "Topsakal'dan Tavsiyeler";
 const ADMIN_POI_CATEGORIES = {
   fuel: { label: 'Akaryakıt İstasyonu', icon: 'fa-gas-pump', color: '#f59e0b' },
   restaurant: { label: 'Restoran', icon: 'fa-utensils', color: '#ef5a6f' },
   hotel: { label: 'Konaklama', icon: 'fa-bed', color: '#38bdf8' },
 };
+
+// Tavsiye katmanının görünürlüğü — varsayılan açık, kullanıcı toggle ile değiştirebilir.
+let adminPoiLayerVisible = true;
 
 // Admin oturumu — yalnızca bellekte tutulur (token dahil). Sayfa yenilenince
 // kaybolur; "beni hatırla" işaretliyse initAdminSystem() localStorage'dan geri yükler.
@@ -1886,6 +1899,7 @@ let adminModeActive = false;
 function initAdminSystem() {
   document.getElementById('admin-logo-btn').addEventListener('click', openAdminLoginOrPanel);
   document.getElementById('admin-mode-exit').addEventListener('click', deactivateAdminMode);
+  document.getElementById('btn-toggle-recommendations').addEventListener('click', toggleAdminPoiLayer);
 
   // "Beni hatırla" ile daha önce kaydedilmiş oturum varsa sessizce geri yükle
   // (otomatik giriş yapmaz, sadece formu doldurur ve admin modunu açmaz;
@@ -2068,10 +2082,10 @@ function logoutAdmin() {
  */
 async function handleAdminMapClick(lat, lng) {
   const { value: formData } = await Swal.fire({
-    title: 'Yeni Yer Ekle',
+    title: "Topsakal'dan Tavsiyeler — Yeni Yer Ekle",
     html: `
       <div style="text-align:left;font-size:12.5px;line-height:1.5">
-        <label style="display:block;margin-bottom:3px;color:#94a3b8">Kategori</label>
+        <label style="display:block;margin-bottom:3px;color:#94a3b8">Tür</label>
         <select id="admin-poi-category" class="swal2-input" style="margin:0 0 10px 0">
           <option value="fuel">⛽ Akaryakıt İstasyonu</option>
           <option value="restaurant">🍽️ Restoran</option>
@@ -2206,7 +2220,11 @@ async function loadPublicPois(owner, repo, branch) {
   }
 }
 
-/** state.adminPois içindeki tüm yerleri haritada işaretçi olarak çizer. */
+/**
+ * state.adminPois içindeki tüm yerleri haritada işaretçi olarak çizer.
+ * Tümü tek bir "Topsakal'dan Tavsiyeler" katmanına (adminPoiLayerGroup) eklenir;
+ * bu katmanın haritada gösterilip gösterilmeyeceği adminPoiLayerVisible'a bağlıdır.
+ */
 function renderAdminPois() {
   if (!adminPoiLayerGroup) return;
   adminPoiLayerGroup.clearLayers();
@@ -2223,6 +2241,7 @@ function renderAdminPois() {
     });
     const marker = L.marker([poi.lat, poi.lng], { icon }).bindPopup(`
       <div style="min-width:180px">
+        <div style="font-weight:700;font-size:11px;letter-spacing:.02em;color:#f59e0b;margin-bottom:3px;text-transform:uppercase">${escapeHtml(ADMIN_RECOMMENDATIONS_TITLE)}</div>
         <div style="font-weight:700;font-size:13px;margin-bottom:2px">${escapeHtml(poi.name)}</div>
         <div style="font-size:11px;color:#64748b;margin-bottom:4px">${escapeHtml(cat.label)}</div>
         ${poi.description ? `<div style="font-size:12px">${escapeHtml(poi.description)}</div>` : ''}
@@ -2230,6 +2249,18 @@ function renderAdminPois() {
     `);
     marker.addTo(adminPoiLayerGroup);
   });
+}
+
+/** "Topsakal'dan Tavsiyeler" katmanını haritada aç/kapat eder. */
+function toggleAdminPoiLayer() {
+  adminPoiLayerVisible = !adminPoiLayerVisible;
+  if (adminPoiLayerVisible) {
+    map.addLayer(adminPoiLayerGroup);
+  } else {
+    map.removeLayer(adminPoiLayerGroup);
+  }
+  const btn = document.getElementById('btn-toggle-recommendations');
+  if (btn) btn.classList.toggle('opacity-50', !adminPoiLayerVisible);
 }
 
 async function onMapClick(e) {
