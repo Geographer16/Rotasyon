@@ -4,7 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Rotasyon — Gelişmiş Rota Optimizasyonu &amp; Gezi Planlama</title>
-<meta name="theme-color" content="#080b10">
+<meta name="theme-color" content="#080b10" id="meta-theme-color">
+<script>
+  /* Tema tercihini sayfa çizilmeden ÖNCE uygula (koyu→açık yanıp sönmesini önler).
+     Kayıtlı tercih yoksa cihazın sistem temasına uyar. */
+  (function () {
+    try {
+      var t = localStorage.getItem('rotalis_theme');
+      if (!t) t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+      var m = document.getElementById('meta-theme-color');
+      if (m) m.setAttribute('content', t === 'light' ? '#f4f7fa' : '#080b10');
+    } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); }
+  })();
+</script>
 
 <!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -22,14 +35,14 @@
     theme: {
       extend: {
         colors: {
-          ink: '#080b10',
-          panel: '#0d1218',
+          ink: 'var(--c-ink)',
+          panel: 'var(--c-panel)',
           glass: 'rgba(16, 22, 30, 0.62)',
-          border: 'rgba(148, 176, 199, 0.14)',
-          accent: '#3ddc97',
-          accent2: '#5b8def',
-          warn: '#f2a341',
-          danger: '#ef5a6f',
+          border: 'var(--c-border)',
+          accent: 'var(--c-accent)',
+          accent2: 'var(--c-accent2)',
+          warn: 'var(--c-warn)',
+          danger: 'var(--c-danger)',
         },
         fontFamily: {
           display: ['"Space Grotesk"', 'sans-serif'],
@@ -48,12 +61,118 @@
 
 :root {
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  color-scheme: dark;
+
+  /* ---- Yüzeyler ---- */
+  --c-ink: #080b10;
+  --c-panel: #0d1218;
+  --c-page: #060809;
+  --c-glass: rgba(13, 18, 24, 0.62);
+  --c-glass-strong: rgba(9, 13, 18, 0.92);
+  --c-popup: #0f151c;
+  --c-overlay: #0e141b;
+  --c-inset: rgba(255, 255, 255, 0.03);
+  --c-inset-hover: rgba(255, 255, 255, 0.07);
+
+  /* ---- Çizgiler ---- */
+  --c-border: rgba(148, 176, 199, 0.14);
+  --c-border-strong: rgba(148, 176, 199, 0.22);
+
+  /* ---- Metin ---- */
+  --c-text: #f1f5f9;
+  --c-text-2: #e2e8f0;
+  --c-text-3: #cbd5e1;
+  --c-text-muted: #94a3b8;
+  --c-text-dim: #64748b;
+  --c-text-faint: #55647a;
+
+  /* ---- Vurgu renkleri ---- */
+  --c-accent: #3ddc97;
+  --c-accent-ink: #06120c;      /* accent zemin üstündeki yazı/ikon */
+  --c-accent-text: #3ddc97;     /* accent renkli YAZI (açık temada koyulaşır) */
+  --c-accent2: #5b8def;
+  --c-warn: #f2a341;
+  --c-danger: #ef5a6f;
+  --c-amber-text: #fcd34d;
+  --c-purple-text: #c084fc;
+  --c-yellow-text: #fde047;
+
+  /* ---- Harita üstü etiketler ---- */
+  --c-tooltip-bg: rgba(13, 18, 24, 0.88);
+  --c-legpill-bg: rgba(6, 9, 13, 0.96);
+  --c-shadow: rgba(0, 0, 0, 0.35);
+  --c-scroll: rgba(148,176,199,0.2);
 }
+
+/* =================== AÇIK TEMA ===================
+   Yalnızca değişkenleri ve Tailwind'in sabit slate/white sınıflarını yeniden
+   tanımlar; böylece tüm paneller, formlar, açılır pencereler ve ikonlar
+   açık zeminde de yüksek kontrastla okunur. Kontrast oranları WCAG AA (4.5:1)
+   hedeflenerek seçildi. */
+html[data-theme="light"] {
+  color-scheme: light;
+
+  --c-ink: #f4f7fa;
+  --c-panel: #ffffff;
+  --c-page: #e8edf2;
+  --c-glass: rgba(255, 255, 255, 0.82);
+  --c-glass-strong: rgba(255, 255, 255, 0.96);
+  --c-popup: #ffffff;
+  --c-overlay: #ffffff;
+  --c-inset: rgba(15, 23, 42, 0.035);
+  --c-inset-hover: rgba(15, 23, 42, 0.07);
+
+  --c-border: rgba(15, 23, 42, 0.12);
+  --c-border-strong: rgba(15, 23, 42, 0.22);
+
+  --c-text: #0f172a;
+  --c-text-2: #1e293b;
+  --c-text-3: #334155;
+  --c-text-muted: #475569;
+  --c-text-dim: #566579;
+  --c-text-faint: #64748b;
+
+  --c-accent: #10b981;
+  --c-accent-ink: #ffffff;
+  --c-accent-text: #047857;
+  --c-accent2: #2563eb;
+  --c-warn: #d97706;
+  --c-danger: #dc2626;
+  --c-amber-text: #b45309;
+  --c-purple-text: #7e22ce;
+  --c-yellow-text: #a16207;
+
+  --c-tooltip-bg: rgba(255, 255, 255, 0.95);
+  --c-legpill-bg: rgba(255, 255, 255, 0.98);
+  --c-shadow: rgba(15, 23, 42, 0.16);
+  --c-scroll: rgba(15,23,42,0.22);
+}
+
+/* Tailwind'in sabit renk sınıflarını tema değişkenlerine bağla */
+body { color: var(--c-text-2); }
+.text-white { color: var(--c-text) !important; }
+.text-slate-200 { color: var(--c-text-2); }
+.text-slate-300 { color: var(--c-text-3); }
+.text-slate-400 { color: var(--c-text-muted); }
+.text-slate-500 { color: var(--c-text-dim); }
+.hover\:text-white:hover { color: var(--c-text) !important; }
+.hover\:bg-white\/5:hover { background: var(--c-inset-hover) !important; }
+.bg-slate-500\/60 { background: var(--c-text-faint) !important; opacity: .55; }
+.text-accent { color: var(--c-accent-text); }
+.text-warn { color: var(--c-warn); }
+.text-danger, .\!text-danger { color: var(--c-danger) !important; }
+.text-amber-400 { color: var(--c-amber-text); }
+.text-purple-400 { color: var(--c-purple-text); }
+.text-yellow-300 { color: var(--c-yellow-text); }
+.border-border { border-color: var(--c-border); }
+.bg-border { background-color: var(--c-border); }
+.bg-ink { background-color: var(--c-ink); }
+.text-ink { color: var(--c-accent-ink); }
 
 * { box-sizing: border-box; }
 
 html, body {
-  background: #060809;
+  background: var(--c-page);
   scrollbar-gutter: stable;
   height: 100%;
   overscroll-behavior: none;
@@ -98,22 +217,22 @@ body::before {
 }
 
 .leaflet-control-attribution {
-  background: rgba(8, 11, 16, 0.7) !important;
-  color: #64748b !important;
+  background: var(--c-glass) !important;
+  color: var(--c-text-dim) !important;
   font-size: 10px !important;
   backdrop-filter: blur(6px);
 }
-.leaflet-control-attribution a { color: #94a3b8 !important; }
+.leaflet-control-attribution a { color: var(--c-text-muted) !important; }
 .leaflet-popup-content-wrapper {
-  background: #0f151c;
-  color: #e2e8f0;
+  background: var(--c-popup);
+  color: var(--c-text-2);
   border-radius: 14px;
-  border: 1px solid rgba(148, 176, 199, 0.16);
-  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  border: 1px solid var(--c-border);
+  box-shadow: 0 10px 40px var(--c-shadow);
 }
-.leaflet-popup-tip { background: #0f151c; }
+.leaflet-popup-tip { background: var(--c-popup); }
 .leaflet-popup-content { margin: 12px 14px; font-family: 'Inter', sans-serif; font-size: 13px; }
-.leaflet-popup-close-button { color: #64748b !important; }
+.leaflet-popup-close-button { color: var(--c-text-dim) !important; }
 
 /* Durak pin'ine tıklayınca açılan mini pencere: isim zaten pinin yanında
    sürekli görünen etikette yazdığı için burada tekrar edilmiyor, sadece
@@ -143,27 +262,27 @@ body::before {
 
 /* Pin'in yanında sürekli görünen isim etiketi (il/ilçe/mahalle vb.) */
 .pin-label-tooltip {
-  background: rgba(13, 18, 24, 0.88);
+  background: var(--c-tooltip-bg);
   backdrop-filter: blur(6px);
-  color: #f1f5f9;
-  border: 1px solid rgba(148, 176, 199, 0.2);
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
   border-radius: 8px;
   padding: 5px 11px;
   font-family: 'Inter', sans-serif;
   font-size: 13.5px;
   font-weight: 700;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+  box-shadow: 0 4px 14px var(--c-shadow);
   white-space: nowrap;
 }
 .pin-label-tooltip::before { display: none; }
 
 /* ================= GLASSMORPHIC SHELL ================= */
 .glass-card {
-  background: rgba(13, 18, 24, 0.62);
+  background: var(--c-glass);
   backdrop-filter: blur(20px) saturate(1.4);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  border: 1px solid rgba(148, 176, 199, 0.14);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255,255,255,0.03);
+  border: 1px solid var(--c-border);
+  box-shadow: 0 8px 32px var(--c-shadow), inset 0 1px 0 var(--c-inset);
   transition: background 0.2s ease, border-color 0.2s ease;
 }
 
@@ -173,13 +292,13 @@ body::before {
    belirgin biçimde daha opak ve koyu yaparak yazıların her zaman okunur
    kalmasını sağlıyoruz. */
 body.map-theme-light .glass-card {
-  background: rgba(9, 13, 18, 0.92);
-  border-color: rgba(148, 176, 199, 0.22);
+  background: var(--c-glass-strong);
+  border-color: var(--c-border-strong);
 }
 
 .glass-inset {
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(148, 176, 199, 0.1);
+  background: var(--c-inset);
+  border: 1px solid var(--c-border);
 }
 
 /* ---- Panel shell: masaüstü sabit sol panel / mobil off-canvas ---- */
@@ -227,7 +346,7 @@ body.map-theme-light .glass-card {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .panel-shell.open { transform: translateY(0); }
-  #drawer-handle { transition: opacity 0.25s ease, transform 0.25s ease; }
+  #drawer-handle { transition: opacity 0.25s ease, transform 0.25s ease; touch-action: none; }
   #drawer-handle.hidden-handle { opacity: 0; transform: translate(-50%, 40px); pointer-events: none; }
 
   /* Dikey (portrait) mobil: harita üstü kontrolleri drawer tutamacı ve
@@ -265,6 +384,254 @@ body.map-theme-light .glass-card {
   }
 }
 
+/* SweetAlert2 kapatma (çarpı) butonu — koyu tema uyumlu */
+.swal2-close { color: var(--c-text-muted) !important; font-size: 2rem !important; }
+.swal2-close:hover { color: var(--c-text) !important; background: transparent !important; }
+.swal2-close:focus { box-shadow: none !important; }
+
+
+/* ================= TAVSİYELER DÜĞMESİ ================= */
+.rec-toggle-btn { color: var(--c-amber-text); }
+.rec-toggle-btn:hover { color: var(--c-text); }
+.rec-toggle-btn i { transition: transform 0.2s ease; }
+body .rec-toggle-btn.rec-active,
+body.map-theme-light .rec-toggle-btn.rec-active {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+  border-color: transparent;
+  color: #1a0f00;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.35);
+}
+body .rec-toggle-btn.rec-active:hover { color: #1a0f00; filter: brightness(1.06); }
+.rec-toggle-btn.rec-active i { transform: rotate(72deg) scale(1.08); color: #1a0f00; }
+
+/* ================= TAVSİYE POPUP'I ================= */
+.rec-popup-wrap .leaflet-popup-content-wrapper { padding: 2px; border-radius: 16px; }
+.rec-popup-wrap .leaflet-popup-content { margin: 12px 13px 13px; }
+.rec-popup-eyebrow {
+  font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--c-amber-text); margin-bottom: 6px;
+}
+.rec-popup-row { display: flex; align-items: center; gap: 12px; }
+.rec-popup-info { flex: 1; min-width: 0; }
+.rec-popup-name { font-weight: 700; font-size: 14px; line-height: 1.25; color: var(--c-text); word-break: break-word; }
+.rec-popup-cat { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 11.5px; color: var(--c-text-muted); }
+.rec-popup-cat i { font-size: 11px; }
+.rec-popup-desc {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--c-border);
+  font-size: 12.5px; line-height: 1.5; color: var(--c-text-3);
+}
+.rec-directions-btn {
+  flex-shrink: 0; width: 46px; height: 46px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #ffffff; font-size: 20px; border: 0; cursor: pointer;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.38);
+  transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+.rec-directions-btn:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 8px 20px rgba(37, 99, 235, 0.5); }
+.rec-directions-btn:active { transform: scale(0.94); }
+.rec-directions-btn:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
+
+/* ================= TEMA DÜĞMESİ ================= */
+.theme-toggle {
+  width: 36px; height: 36px; border-radius: 11px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--c-text-muted); background: var(--c-inset);
+  border: 1px solid var(--c-border); font-size: 14px;
+  transition: color .15s ease, background .15s ease, transform .15s ease;
+}
+.theme-toggle:hover { color: var(--c-text); background: var(--c-inset-hover); }
+.theme-toggle:active { transform: scale(0.92); }
+.theme-toggle .ico-sun { display: none; }
+html[data-theme="light"] .theme-toggle .ico-sun { display: inline; }
+html[data-theme="light"] .theme-toggle .ico-moon { display: none; }
+
+/* ================= AÇIK TEMA: BİLEŞEN DÜZELTMELERİ ================= */
+html[data-theme="light"] body::before {
+  background:
+    radial-gradient(ellipse at 15% 10%, rgba(16, 185, 129, 0.07), transparent 45%),
+    radial-gradient(ellipse at 85% 90%, rgba(37, 99, 235, 0.06), transparent 50%);
+}
+html[data-theme="light"] .glass-card { box-shadow: 0 8px 28px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.8); }
+html[data-theme="light"] .leaflet-control-attribution a { color: var(--c-accent2) !important; }
+html[data-theme="light"] .btn-primary { color: #ffffff; background: linear-gradient(135deg, #10b981, #059669); box-shadow: 0 4px 16px rgba(5,150,105,0.28); }
+html[data-theme="light"] .layer-btn.active { color: #ffffff; background: #10b981; }
+html[data-theme="light"] .input-field:focus,
+html[data-theme="light"] .input-field-sm:focus { border-color: rgba(5,150,105,0.65); background: #fff; }
+html[data-theme="light"] .input-field, html[data-theme="light"] .input-field-sm { background: rgba(15,23,42,0.03); }
+html[data-theme="light"] .btn-secondary { background: #fff; color: var(--c-text-3); }
+html[data-theme="light"] .btn-secondary:hover { background: rgba(15,23,42,0.05); }
+html[data-theme="light"] .poi-toggle[data-active="true"],
+html[data-theme="light"] .fuel-type-btn.active { border-color: rgba(5,150,105,0.6); background: rgba(16,185,129,0.1); color: var(--c-text); }
+html[data-theme="light"] .stop-card.sortable-chosen { border-color: rgba(5,150,105,0.5); background: rgba(16,185,129,0.08); }
+html[data-theme="light"] .alt-route-card[data-selected="true"] { border-color: rgba(5,150,105,0.6); background: rgba(16,185,129,0.09); }
+html[data-theme="light"] .alt-route-card[data-selected="false"] { opacity: 0.72; }
+html[data-theme="light"] .alt-route-card[data-selected="false"]:hover { opacity: 0.95; }
+html[data-theme="light"] .alt-route-card .alt-badge { background: rgba(16,185,129,0.16); color: #047857; }
+html[data-theme="light"] .suggestion-item:hover,
+html[data-theme="light"] .suggestion-item.kbd-active { background: rgba(16,185,129,0.1); }
+html[data-theme="light"] .suggestion-item i { color: var(--c-accent2); }
+html[data-theme="light"] .stop-popup-remove-only { background: rgba(220,38,38,0.08); border-color: rgba(220,38,38,0.35); color: #b91c1c; }
+html[data-theme="light"] .stop-card .stop-remove:hover { color: #b91c1c; background: rgba(220,38,38,0.1); }
+html[data-theme="light"] .stop-card .drag-handle { color: var(--c-text-faint); }
+/* Durak listesi rozetleri (.map-pin-flat): renk kuralları yalnızca .map-pin için
+   tanımlıydı, bu yüzden rozetler zeminsiz kalıyordu. Kendi renkleri: */
+.map-pin-flat.pin-start { background: #3ddc97; }
+.map-pin-flat.pin-end { background: #ef5a6f; }
+.map-pin-flat.pin-stop { background: #5b8def; }
+.stop-card .stop-marker i { color: #06120c; }
+.stop-card .stop-marker.pin-end i, .stop-card .stop-marker.pin-stop i { color: #ffffff; }
+html[data-theme="light"] .map-pin-flat.pin-start { background: #10b981; }
+html[data-theme="light"] .map-pin-flat.pin-end { background: #dc2626; }
+html[data-theme="light"] .map-pin-flat.pin-stop { background: #2563eb; }
+html[data-theme="light"] .stop-card .stop-marker i { color: #ffffff; }
+html[data-theme="light"] .range-slider { background: linear-gradient(90deg, #10b981, #cbd5e1); }
+html[data-theme="light"] .range-slider::-webkit-slider-thumb { background: #10b981; }
+html[data-theme="light"] .leg-map-label { border-color: rgba(5,150,105,0.6); }
+html[data-theme="light"] .leg-map-label-connector { background: rgba(5,150,105,0.7); }
+html[data-theme="light"] .leg-map-label-dot { background: #10b981; box-shadow: 0 0 0 2px #fff; }
+html[data-theme="light"] .pin-label-tooltip { color: var(--c-text); }
+html[data-theme="light"] .skeleton-chart, html[data-theme="light"] .skeleton-line {
+  background: linear-gradient(100deg, rgba(15,23,42,0.04) 30%, rgba(15,23,42,0.09) 50%, rgba(15,23,42,0.04) 70%);
+  background-size: 200% 100%;
+}
+html[data-theme="light"] .rec-toggle-btn:not(.rec-active), html[data-theme="light"] .rec-toggle-btn:not(.rec-active) i { color: #b45309; }
+html[data-theme="light"] .rec-popup-eyebrow { color: #b45309; }
+html[data-theme="light"] .swal2-popup.rotalis-toast { border-color: var(--c-border) !important; }
+html[data-theme="light"] #admin-active-dot { border-color: #fff; }
+html[data-theme="light"] .map-pin i { color: #ffffff; }
+html[data-theme="light"] .map-pin.pin-restaurant i { color: #422006; }
+html[data-theme="light"] .map-pin.pin-fuel i { color: #451a03; }
+
+/* SweetAlert2: tema uyumlu (koyu/açık) */
+.swal2-popup { background: var(--c-popup) !important; color: var(--c-text-2) !important; border: 1px solid var(--c-border); }
+.swal2-title, .swal2-html-container { color: var(--c-text-2) !important; }
+.swal2-input, .swal2-textarea, .swal2-select {
+  background: var(--c-inset) !important; color: var(--c-text) !important;
+  border: 1px solid var(--c-border-strong) !important; box-shadow: none !important;
+}
+.swal2-input::placeholder, .swal2-textarea::placeholder { color: var(--c-text-faint) !important; }
+.swal2-input:focus, .swal2-textarea:focus, .swal2-select:focus { border-color: var(--c-accent) !important; }
+.swal2-select option { background: var(--c-popup); color: var(--c-text); }
+.swal2-validation-message { background: var(--c-inset) !important; color: var(--c-danger) !important; }
+.swal2-popup .swal2-styled.swal2-cancel { color: var(--c-text-3) !important; background: var(--c-inset-hover) !important; }
+html[data-theme="light"] .swal2-popup .swal2-styled.swal2-confirm { color: #fff !important; }
+
+/* Admin formları: alanlar her zaman tam genişlikte, başlık makul boyutta */
+.swal2-popup .swal2-input, .swal2-popup .swal2-textarea, .swal2-popup .swal2-select {
+  width: 100% !important; max-width: 100% !important; box-sizing: border-box;
+}
+.swal2-popup .swal2-title { font-size: 1.25rem !important; line-height: 1.35; padding: 0.4em 1.6em 0; }
+.swal2-popup .swal2-html-container { margin: 1em 1.2em 0.3em; }
+.swal2-popup .swal2-textarea { min-height: 84px; }
+
+
+/* ================= TAVSİYE İŞARETÇİLERİ ================= */
+.rec-marker {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid rgba(255,255,255,.92);
+  box-shadow: 0 3px 10px rgba(0,0,0,.4);
+  transition: transform .15s ease;
+}
+.rec-marker i { color: #fff; font-size: 12px; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+.rec-marker:hover { transform: scale(1.12); }
+.rec-marker-near { animation: rec-pulse 2.2s ease-out infinite; border-color: #fff; }
+@keyframes rec-pulse {
+  0%   { box-shadow: 0 3px 10px rgba(0,0,0,.4), 0 0 0 0 rgba(245,158,11,.65); }
+  70%  { box-shadow: 0 3px 10px rgba(0,0,0,.4), 0 0 0 11px rgba(245,158,11,0); }
+  100% { box-shadow: 0 3px 10px rgba(0,0,0,.4), 0 0 0 0 rgba(245,158,11,0); }
+}
+
+/* ================= KATEGORİ FİLTRE ÇİPLERİ ================= */
+.rec-filter-bar {
+  display: flex; flex-direction: column; gap: 6px; align-items: stretch;
+  animation: rec-fade-in .2s ease;
+}
+.rec-filter-bar.hidden { display: none; }
+@keyframes rec-fade-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.rec-chip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 11px; border-radius: 12px;
+  font-size: 11.5px; font-weight: 600;
+  color: var(--c-text-2);
+  background: var(--c-glass-strong);
+  border: 1px solid var(--c-border-strong);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 14px var(--c-shadow);
+  transition: opacity .15s ease, transform .15s ease, background .15s ease;
+}
+.rec-chip i { color: var(--chip-color, var(--c-text-muted)); font-size: 12px; width: 14px; text-align: center; }
+.rec-chip:hover { transform: translateX(-2px); }
+.rec-chip.is-off { opacity: .5; }
+.rec-chip.is-off span { text-decoration: line-through; text-decoration-thickness: 1px; }
+.rec-chip.is-empty { opacity: .38; }
+
+/* ================= POPUP ZENGİNLEŞTİRME ================= */
+.rec-popup-wrap .leaflet-popup-content { width: auto !important; }
+.rec-popup-photo {
+  margin: -12px -13px 10px; height: 118px; overflow: hidden;
+  border-radius: 14px 14px 0 0; background: var(--c-inset);
+}
+.rec-popup-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rec-near-badge {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 6px;
+  padding: 1px 7px; border-radius: 999px; font-size: 9.5px; letter-spacing: .02em;
+  color: #78350f; background: #fde68a; text-transform: none;
+}
+.rec-popup-actions {
+  display: flex; align-items: center; gap: 7px; margin-top: 11px; padding-top: 10px;
+  border-top: 1px solid var(--c-border);
+}
+.rec-act-spacer { flex: 1; }
+.rec-act-btn {
+  width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; text-decoration: none; cursor: pointer;
+  color: var(--c-text-2); background: var(--c-inset);
+  border: 1px solid var(--c-border-strong);
+  transition: background .15s ease, color .15s ease, transform .12s ease;
+}
+.rec-act-btn:hover { background: var(--c-inset-hover); color: var(--c-text); }
+.rec-act-btn:active { transform: scale(.92); }
+.rec-act-btn.is-added, .rec-act-btn:disabled { color: var(--c-accent-text); border-color: rgba(16,185,129,.5); background: rgba(16,185,129,.12); cursor: default; }
+.rec-act-btn:not(.is-added):not(.rec-act-admin):not(.rec-act-danger):first-child { color: var(--c-accent-text); }
+.rec-act-admin { color: var(--c-accent2); }
+.rec-act-danger { color: var(--c-danger); }
+.rec-act-danger:hover { background: rgba(239,68,68,.12); }
+.rec-act-btn:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+
+/* ================= ROTADAKİ TAVSİYELER ŞERİDİ ================= */
+.rec-route-banner {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 11px; border-radius: 14px;
+  background: linear-gradient(135deg, rgba(245,158,11,.16), rgba(249,115,22,.1));
+  border: 1px solid rgba(245,158,11,.45);
+}
+.rec-route-banner.hidden { display: none; }
+.rec-banner-icon {
+  width: 34px; height: 34px; border-radius: 11px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #f59e0b, #f97316); color: #1a0f00; font-size: 14px;
+}
+.rec-banner-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rec-banner-text b { font-size: 13px; color: var(--c-text); }
+.rec-banner-text span { font-size: 11px; color: var(--c-text-muted); }
+.rec-banner-btn {
+  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--c-amber-text); background: var(--c-inset); border: 1px solid var(--c-border-strong);
+  transition: background .15s ease, transform .15s ease;
+}
+.rec-banner-btn:hover { background: var(--c-inset-hover); transform: translateX(2px); }
+html[data-theme="light"] .rec-route-banner { background: linear-gradient(135deg, rgba(245,158,11,.14), rgba(249,115,22,.08)); border-color: rgba(217,119,6,.5); }
+html[data-theme="light"] .rec-near-badge { background: #fef3c7; color: #92400e; }
+
+/* Tema geçişi yumuşak olsun */
+body, .glass-card, .input-field, .input-field-sm, .btn-secondary, .stop-card, .stat-chip, .swal2-popup {
+  transition: background-color .25s ease, border-color .25s ease, color .25s ease;
+}
+
 /* Kısa/yatay mobil ekranlarda (yükseklik dar) drawer'ın çok yer kaplamasını önle */
 @media (max-width: 1023px) and (max-height: 480px) {
   .panel-shell { height: 88vh; max-height: 88vh; }
@@ -278,8 +645,8 @@ body.map-theme-light .glass-card {
 /* ================= SCROLLBAR ================= */
 .scrollbar-thin::-webkit-scrollbar { width: 6px; }
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
-.scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(148,176,199,0.2); border-radius: 10px; }
-.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rgba(148,176,199,0.35); }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 10px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: var(--c-border-strong); }
 /* Drawer içeriği kaydırılırken, kaydırma listenin sonuna geldiğinde
    arkadaki sayfaya/haritaya "overscroll" olarak sızmasın (mobilde
    pull-to-refresh veya harita zoom'unun kazara tetiklenmesini önler). */
@@ -290,36 +657,38 @@ body.map-theme-light .glass-card {
   display: block;
   font-size: 11.5px;
   font-weight: 600;
-  color: #8a9bb0;
+  color: var(--c-text-muted);
   margin-bottom: 6px;
   letter-spacing: 0.01em;
 }
 
 .input-field {
   width: 100%;
-  background: rgba(255,255,255,0.035);
-  border: 1px solid rgba(148,176,199,0.16);
+  background: var(--c-inset);
+  border: 1px solid var(--c-border);
   border-radius: 12px;
   padding: 11px 12px;
   font-size: 13.5px;
-  color: #f1f5f9;
+  color: var(--c-text);
   transition: border-color 0.15s ease, background 0.15s ease;
 }
-.input-field::placeholder { color: #55647a; }
+.input-field.pl-10 { padding-left: 2.5rem; }
+.input-field.pr-10 { padding-right: 2.75rem; }
+.input-field::placeholder { color: var(--c-text-faint); }
 .input-field:focus {
   outline: none;
   border-color: rgba(61, 220, 151, 0.5);
-  background: rgba(255,255,255,0.05);
+  background: var(--c-inset-hover);
 }
 
 .input-field-sm {
   width: 100%;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(148,176,199,0.16);
+  background: var(--c-inset);
+  border: 1px solid var(--c-border);
   border-radius: 9px;
   padding: 7px 9px;
   font-size: 13px;
-  color: #f1f5f9;
+  color: var(--c-text);
 }
 .input-field-sm:focus { outline: none; border-color: rgba(61,220,151,0.5); }
 
@@ -328,7 +697,7 @@ body.map-theme-light .glass-card {
   left: 13px;
   top: 50%;
   transform: translateY(-50%);
-  color: #55647a;
+  color: var(--c-text-faint);
   font-size: 13px;
   pointer-events: none;
 }
@@ -337,7 +706,7 @@ body.map-theme-light .glass-card {
 .btn-primary {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   background: linear-gradient(135deg, #3ddc97, #2fb883);
-  color: #06120c;
+  color: var(--c-accent-ink);
   font-weight: 600;
   border-radius: 13px;
   padding: 10px 14px;
@@ -350,56 +719,56 @@ body.map-theme-light .glass-card {
 
 .btn-secondary {
   display: flex; align-items: center; justify-content: center; gap: 6px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(148,176,199,0.16);
-  color: #cbd5e1;
+  background: var(--c-inset);
+  border: 1px solid var(--c-border);
+  color: var(--c-text-3);
   font-weight: 500;
   border-radius: 11px;
   padding: 9px 10px;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
-.btn-secondary:hover { background: rgba(255,255,255,0.075); border-color: rgba(148,176,199,0.28); }
+.btn-secondary:hover { background: var(--c-inset-hover); border-color: rgba(148,176,199,0.28); }
 
 .fab-btn {
   width: 46px; height: 46px;
   border-radius: 15px;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(13, 18, 24, 0.72);
+  background: var(--c-glass-strong);
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(148,176,199,0.16);
-  color: #e2e8f0;
+  border: 1px solid var(--c-border);
+  color: var(--c-text-2);
   font-size: 16px;
-  box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+  box-shadow: 0 6px 24px var(--c-shadow);
   transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
-.fab-btn:hover { transform: translateY(-2px); color: #3ddc97; background: rgba(13,18,24,0.9); }
+.fab-btn:hover { transform: translateY(-2px); color: var(--c-accent-text); background: var(--c-glass-strong); }
 .fab-btn:active { transform: translateY(0); }
 
 /* ================= ZOOM FAB ================= */
 .zoom-btn {
   width: 44px; height: 44px;
   display: flex; align-items: center; justify-content: center;
-  color: #e2e8f0;
+  color: var(--c-text-2);
   font-size: 15px;
   border-radius: 13px;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.zoom-btn:hover { color: #3ddc97; background: rgba(255,255,255,0.06); }
+.zoom-btn:hover { color: var(--c-accent-text); background: var(--c-inset-hover); }
 .zoom-btn:active { transform: scale(0.94); }
-.zoom-btn-divider { height: 1px; margin: 0 6px; background: rgba(148,176,199,0.16); }
+.zoom-btn-divider { height: 1px; margin: 0 6px; background: var(--c-border); }
 
 .layer-btn {
   width: 38px; height: 38px;
   border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
-  color: #8a9bb0;
+  color: var(--c-text-muted);
   font-size: 14px;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.layer-btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.06); }
-.layer-btn.active { color: #06120c; background: #3ddc97; }
+.layer-btn:hover { color: var(--c-text-2); background: var(--c-inset-hover); }
+.layer-btn.active { color: var(--c-accent-ink); background: #3ddc97; }
 /* Açık harita temalarında pasif katman ikonlarının kontrastını artır */
-body.map-theme-light .layer-btn:not(.active) { color: #cbd5e1; }
+body.map-theme-light .layer-btn:not(.active) { color: var(--c-text-3); }
 
 /* ================= SUGGESTION BOX ================= */
 .suggestion-box {
@@ -407,10 +776,10 @@ body.map-theme-light .layer-btn:not(.active) { color: #cbd5e1; }
   top: calc(100% + 6px);
   left: 0; right: 0;
   z-index: 900;
-  background: #0e141b;
-  border: 1px solid rgba(148,176,199,0.18);
+  background: var(--c-overlay);
+  border: 1px solid var(--c-border);
   border-radius: 14px;
-  box-shadow: 0 16px 44px rgba(0,0,0,0.5);
+  box-shadow: 0 16px 44px var(--c-shadow);
   max-height: 280px;
   overflow-y: auto;
   padding: 6px;
@@ -424,17 +793,17 @@ body.map-theme-light .layer-btn:not(.active) { color: #cbd5e1; }
 }
 .suggestion-item:hover, .suggestion-item.kbd-active { background: rgba(61, 220, 151, 0.09); }
 .suggestion-item i { color: #5b8def; margin-top: 2px; font-size: 12px; }
-.suggestion-item .s-title { font-size: 13px; color: #e2e8f0; font-weight: 500; line-height: 1.35; }
-.suggestion-item .s-sub { font-size: 11px; color: #64748b; margin-top: 1px; }
+.suggestion-item .s-title { font-size: 13px; color: var(--c-text-2); font-weight: 500; line-height: 1.35; }
+.suggestion-item .s-sub { font-size: 11px; color: var(--c-text-dim); margin-top: 1px; }
 .suggestion-loading, .suggestion-empty {
-  padding: 14px 10px; text-align: center; font-size: 12.5px; color: #64748b;
+  padding: 14px 10px; text-align: center; font-size: 12.5px; color: var(--c-text-dim);
 }
 
 /* ================= STOP LIST CARDS ================= */
 .stop-card {
   display: flex; align-items: center; gap: 10px;
-  background: rgba(255,255,255,0.035);
-  border: 1px solid rgba(148,176,199,0.13);
+  background: var(--c-inset);
+  border: 1px solid var(--c-border);
   border-radius: 13px;
   padding: 9px 10px;
   cursor: grab;
@@ -444,19 +813,19 @@ body.map-theme-light .layer-btn:not(.active) { color: #cbd5e1; }
 .stop-card.sortable-ghost { opacity: 0.35; }
 .stop-card.sortable-chosen { border-color: rgba(61,220,151,0.4); background: rgba(61,220,151,0.06); }
 .stop-card .drag-handle {
-  color: #475569; font-size: 14px;
+  color: var(--c-text-dim); font-size: 14px;
   padding: 11px 8px; margin: -11px 0;
   touch-action: none;
 }
 .stop-card .stop-marker {
   width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center; font-size: 11px; color: #06120c; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--c-accent-ink); font-weight: 700;
 }
 .stop-card .stop-info { flex: 1; min-width: 0; }
-.stop-card .stop-title { font-size: 12.5px; color: #e2e8f0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.stop-card .stop-sub { font-size: 10.5px; color: #64748b; }
+.stop-card .stop-title { font-size: 12.5px; color: var(--c-text-2); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stop-card .stop-sub { font-size: 10.5px; color: var(--c-text-dim); }
 .stop-card .stop-remove {
-  color: #475569; width: 38px; height: 38px; border-radius: 8px;
+  color: var(--c-text-dim); width: 38px; height: 38px; border-radius: 8px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   margin: -6px -6px -6px 0;
   transition: color 0.12s ease, background 0.12s ease;
@@ -466,38 +835,38 @@ body.map-theme-light .layer-btn:not(.active) { color: #cbd5e1; }
 /* ================= STAT CHIPS / METRICS ================= */
 .stat-chip {
   display: flex; align-items: center; gap: 9px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(148,176,199,0.12);
+  background: var(--c-inset);
+  border: 1px solid var(--c-border);
   border-radius: 13px;
   padding: 10px 11px;
   font-family: 'Space Grotesk', sans-serif;
   font-weight: 700;
   font-size: 15px;
-  color: #f1f5f9;
+  color: var(--c-text);
 }
 .stat-chip i { font-size: 15px; }
-.stat-chip-label { font-family: 'Inter', sans-serif; font-weight: 500; font-size: 10px; color: #64748b; margin-top: 1px; }
+.stat-chip-label { font-family: 'Inter', sans-serif; font-weight: 500; font-size: 10px; color: var(--c-text-dim); margin-top: 1px; }
 
 .leg-row {
   display: flex; align-items: center; justify-content: space-between;
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(148,176,199,0.08);
+  background: var(--c-inset);
+  border: 1px solid var(--c-border);
   border-radius: 10px;
   padding: 7px 10px;
   font-size: 11.5px;
 }
-.leg-row .leg-label { color: #94a3b8; display: flex; align-items: center; gap: 6px; }
-.leg-row .leg-num { color: #cbd5e1; font-weight: 600; font-family: 'Space Grotesk', sans-serif; }
+.leg-row .leg-label { color: var(--c-text-muted); display: flex; align-items: center; gap: 6px; }
+.leg-row .leg-num { color: var(--c-text-3); font-weight: 600; font-family: 'Space Grotesk', sans-serif; }
 
 .elev-metric {
   display: flex; flex-direction: column; align-items: center; gap: 3px;
-  background: rgba(255,255,255,0.025);
+  background: var(--c-inset);
   border-radius: 10px;
   padding: 9px 4px;
   text-align: center;
 }
-.elev-metric span { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px; color: #f1f5f9; }
-.elev-metric label { font-size: 9.5px; color: #64748b; }
+.elev-metric span { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13.5px; color: var(--c-text); }
+.elev-metric label { font-size: 9.5px; color: var(--c-text-dim); }
 
 /* ================= RANGE SLIDER ================= */
 .range-slider {
@@ -513,63 +882,63 @@ body.map-theme-light .layer-btn:not(.active) { color: #cbd5e1; }
   width: 17px; height: 17px;
   border-radius: 50%;
   background: #3ddc97;
-  border: 3px solid #0d1218;
+  border: 3px solid var(--c-panel);
   box-shadow: 0 2px 8px rgba(0,0,0,0.4);
   cursor: pointer;
 }
 .range-slider::-moz-range-thumb {
   width: 17px; height: 17px; border-radius: 50%;
-  background: #3ddc97; border: 3px solid #0d1218; cursor: pointer;
+  background: #3ddc97; border: 3px solid var(--c-panel); cursor: pointer;
 }
 
 /* ================= POI TOGGLE ================= */
 .poi-toggle {
   display: flex; flex-direction: column; align-items: center; gap: 5px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(148,176,199,0.14);
+  background: var(--c-inset);
+  border: 1px solid var(--c-border);
   border-radius: 12px;
   padding: 10px 4px;
   font-size: 10.5px;
-  color: #94a3b8;
+  color: var(--c-text-muted);
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 .poi-toggle i { font-size: 16px; }
 .poi-toggle[data-active="true"] {
   border-color: rgba(61,220,151,0.5);
   background: rgba(61,220,151,0.08);
-  color: #e2e8f0;
+  color: var(--c-text-2);
 }
 
 /* ================= FUEL TYPE TOGGLE ================= */
 .fuel-type-btn {
   display: flex; flex-direction: column; align-items: center; gap: 5px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(148,176,199,0.14);
+  background: var(--c-inset);
+  border: 1px solid var(--c-border);
   border-radius: 12px;
   padding: 10px 4px;
   font-size: 10.5px;
-  color: #94a3b8;
+  color: var(--c-text-muted);
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 .fuel-type-btn i { font-size: 16px; }
 .fuel-type-btn.active {
   border-color: rgba(61,220,151,0.5);
   background: rgba(61,220,151,0.08);
-  color: #e2e8f0;
+  color: var(--c-text-2);
 }
 
 /* ================= SKELETON LOADER ================= */
 .skeleton-chart {
   height: 140px;
   border-radius: 10px;
-  background: linear-gradient(100deg, rgba(255,255,255,0.03) 30%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.03) 70%);
+  background: linear-gradient(100deg, var(--c-inset) 30%, var(--c-inset-hover) 50%, var(--c-inset) 70%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
 }
 .skeleton-line {
   height: 44px;
   border-radius: 13px;
-  background: linear-gradient(100deg, rgba(255,255,255,0.03) 30%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.03) 70%);
+  background: linear-gradient(100deg, var(--c-inset) 30%, var(--c-inset-hover) 50%, var(--c-inset) 70%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
 }
@@ -589,7 +958,7 @@ body.map-theme-light .layer-btn:not(.active) { color: #cbd5e1; }
   box-shadow: 0 3px 10px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.25);
   border: 2px solid rgba(255,255,255,0.85);
 }
-.map-pin i { transform: rotate(45deg); font-size: 13px; color: #06120c; }
+.map-pin i { transform: rotate(45deg); font-size: 13px; color: var(--c-accent-ink); }
 .map-pin.pin-start { background: #3ddc97; }
 .map-pin.pin-end { background: #ef5a6f; }
 .map-pin.pin-stop { background: #5b8def; }
@@ -639,16 +1008,16 @@ body.map-theme-light .layer-btn:not(.active) { color: #cbd5e1; }
   pointer-events: none;
 }
 .leg-map-label {
-  background: rgba(6, 9, 13, 0.96);
+  background: var(--c-legpill-bg);
   border: 1px solid rgba(61, 220, 151, 0.55);
   border-radius: 999px;
   padding: 6px 13px;
   font-family: 'Space Grotesk', sans-serif;
   font-size: 13.5px;
   font-weight: 700;
-  color: #f1f5f9;
+  color: var(--c-text);
   white-space: nowrap;
-  box-shadow: 0 3px 12px rgba(0,0,0,0.55);
+  box-shadow: 0 3px 12px var(--c-shadow);
 }
 .leg-map-label-connector {
   width: 1px;
@@ -691,14 +1060,14 @@ body.map-theme-light .layer-btn:not(.active) { color: #cbd5e1; }
 
 /* ================= TOAST (custom, isolated) ================= */
 .swal2-popup.rotalis-toast {
-  background: rgba(13,18,24,0.92) !important;
+  background: var(--c-glass-strong) !important;
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(148,176,199,0.16) !important;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.5) !important;
-  color: #e2e8f0 !important;
+  border: 1px solid var(--c-border) !important;
+  box-shadow: 0 12px 40px var(--c-shadow) !important;
+  color: var(--c-text-2) !important;
   font-family: 'Inter', sans-serif !important;
 }
-.swal2-popup.rotalis-toast .swal2-title { color: #f1f5f9 !important; font-size: 13.5px !important; }
+.swal2-popup.rotalis-toast .swal2-title { color: var(--c-text) !important; font-size: 13.5px !important; }
 .swal2-popup.rotalis-toast .swal2-html-container { font-size: 12.5px !important; }
 
 /* Reduced motion */
@@ -721,37 +1090,37 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   padding: 8px 10px;
   border-radius: 9px;
   font-size: 12.5px;
-  color: #cbd5e1;
+  color: var(--c-text-3);
   text-align: left;
   transition: background 0.12s ease;
 }
-.ctx-menu-item:hover, .ctx-menu-item:focus-visible { background: rgba(255,255,255,0.06); }
+.ctx-menu-item:hover, .ctx-menu-item:focus-visible { background: var(--c-inset-hover); }
 .ctx-menu-item i { width: 14px; text-align: center; font-size: 12px; }
 
 /* ================= UNIT TOGGLE ================= */
 .unit-toggle-btn {
   font-size: 10.5px;
   font-weight: 600;
-  color: #8a9bb0;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(148,176,199,0.16);
+  color: var(--c-text-muted);
+  background: var(--c-inset);
+  border: 1px solid var(--c-border);
   border-radius: 8px;
   padding: 3px 9px;
   transition: color 0.12s ease, border-color 0.12s ease;
 }
-.unit-toggle-btn:hover { color: #3ddc97; border-color: rgba(61,220,151,0.4); }
+.unit-toggle-btn:hover { color: var(--c-accent-text); border-color: rgba(61,220,151,0.4); }
 
 /* ================= ROUTE ALTERNATIVES ================= */
 .alt-route-card {
   display: flex; align-items: center; justify-content: space-between;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(148,176,199,0.14);
+  background: var(--c-inset);
+  border: 1px solid var(--c-border);
   border-radius: 12px;
   padding: 10px 12px;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
-.alt-route-card:hover { background: rgba(255,255,255,0.055); }
+.alt-route-card:hover { background: var(--c-inset-hover); }
 .alt-route-card[data-selected="true"] {
   border-color: rgba(61,220,151,0.5);
   background: rgba(61,220,151,0.07);
@@ -766,9 +1135,9 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .alt-route-card .alt-badge {
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.02em;
   padding: 2px 7px; border-radius: 6px;
-  background: rgba(61,220,151,0.15); color: #3ddc97;
+  background: rgba(61,220,151,0.15); color: var(--c-accent-text);
 }
-.alt-route-card .alt-nums { font-size: 11.5px; color: #94a3b8; font-family: 'Space Grotesk', sans-serif; font-weight: 600; }
+.alt-route-card .alt-nums { font-size: 11.5px; color: var(--c-text-muted); font-family: 'Space Grotesk', sans-serif; font-weight: 600; }
 
 /* Rota çizgisi geçiş efekti: yeni rota hesaplanırken eski çizgi soluklaşır */
 .route-line-transitioning { transition: opacity 0.25s ease; }
@@ -806,11 +1175,13 @@ button:focus-visible, input:focus-visible, select:focus-visible {
       <button data-layer="topo" class="layer-btn" title="Topoğrafik Harita"><i class="fa-solid fa-mountain-sun"></i></button>
     </div>
     <button id="btn-toggle-recommendations" type="button"
-      class="glass-card rounded-2xl px-3 py-2 flex items-center gap-2 text-xs font-semibold text-amber-300 hover:text-amber-200 transition-colors"
+      class="rec-toggle-btn glass-card rounded-2xl px-3 py-2 flex items-center gap-2 text-xs font-semibold transition-colors"
+      aria-pressed="false"
       title="Topsakal'dan Tavsiyeler'i göster/gizle">
       <i class="fa-solid fa-star"></i>
       <span>Tavsiyeler</span>
     </button>
+    <div id="rec-filter-bar" class="rec-filter-bar hidden" role="group" aria-label="Tavsiye kategorileri"></div>
   </div>
 
   <!-- Harita üstü sağ alt: aksiyon butonları (GPX / Paylaş) -->
@@ -859,9 +1230,14 @@ button:focus-visible, input:focus-visible, select:focus-visible {
             <p class="text-[11px] text-slate-400 leading-tight">Rota Optimizasyonu &amp; Gezi Planlama</p>
           </div>
         </div>
-        <button id="drawer-close" class="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/5">
-          <i class="fa-solid fa-chevron-down"></i>
-        </button>
+        <div class="flex items-center gap-1.5">
+          <button id="btn-theme-toggle" type="button" class="theme-toggle" title="Açık / Koyu tema" aria-label="Temayı değiştir">
+            <i class="fa-solid fa-moon ico-moon"></i><i class="fa-solid fa-sun ico-sun"></i>
+          </button>
+          <button id="drawer-close" class="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/5">
+            <i class="fa-solid fa-chevron-down"></i>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -903,6 +1279,9 @@ button:focus-visible, input:focus-visible, select:focus-visible {
           </button>
         </div>
       </section>
+
+      <!-- ROTADAKİ TAVSİYELER ŞERİDİ -->
+      <div id="rec-route-banner" class="rec-route-banner hidden"></div>
 
       <!-- ROTA SEÇENEKLERİ (En hızlı / alternatifler) -->
       <section id="route-alternatives-section" class="hidden">
@@ -1329,7 +1708,7 @@ function initMap() {
 
   stopMarkersLayer = L.layerGroup().addTo(map);
   poiLayerGroup = L.layerGroup().addTo(map);
-  adminPoiLayerGroup = L.layerGroup().addTo(map);
+  adminPoiLayerGroup = L.layerGroup(); // varsayılan kapalı: kullanıcı düğmeye basınca haritaya eklenir
   legLabelsLayer = L.layerGroup().addTo(map);
 
   document.getElementById('btn-zoom-in').addEventListener('click', () => map.zoomIn());
@@ -1883,13 +2262,14 @@ const POI_FILE_PATH = 'pois.json';
 // haritada tek bir katman olarak gösterilip tek bir düğmeyle açılıp kapatılıyorlar.
 const ADMIN_RECOMMENDATIONS_TITLE = "Topsakal'dan Tavsiyeler";
 const ADMIN_POI_CATEGORIES = {
-  fuel: { label: 'Akaryakıt İstasyonu', icon: 'fa-gas-pump', color: '#f59e0b' },
-  restaurant: { label: 'Restoran', icon: 'fa-utensils', color: '#ef5a6f' },
-  hotel: { label: 'Konaklama', icon: 'fa-bed', color: '#38bdf8' },
+  fuel: { label: 'Akaryakıt İstasyonu', shortLabel: 'Akaryakıt', icon: 'fa-gas-pump', color: '#f59e0b', emoji: '⛽' },
+  restaurant: { label: 'Restoran', icon: 'fa-utensils', color: '#ef5a6f', emoji: '🍽️' },
+  hotel: { label: 'Konaklama', icon: 'fa-bed', color: '#38bdf8', emoji: '🛏️' },
+  place: { label: 'Tavsiye Edilen Mekan', shortLabel: 'Mekan', icon: 'fa-star', color: '#a78bfa', emoji: '⭐' },
 };
 
-// Tavsiye katmanının görünürlüğü — varsayılan açık, kullanıcı toggle ile değiştirebilir.
-let adminPoiLayerVisible = true;
+// Tavsiye katmanının görünürlüğü — varsayılan KAPALI; kullanıcı 'Tavsiyeler' düğmesine basınca açılır.
+let adminPoiLayerVisible = false;
 
 // Admin oturumu — yalnızca bellekte tutulur (token dahil). Sayfa yenilenince
 // kaybolur; "beni hatırla" işaretliyse initAdminSystem() localStorage'dan geri yükler.
@@ -1900,6 +2280,8 @@ function initAdminSystem() {
   document.getElementById('admin-logo-btn').addEventListener('click', openAdminLoginOrPanel);
   document.getElementById('admin-mode-exit').addEventListener('click', deactivateAdminMode);
   document.getElementById('btn-toggle-recommendations').addEventListener('click', toggleAdminPoiLayer);
+  buildRecFilterBar();
+  syncRecommendationsButton();
 
   // "Beni hatırla" ile daha önce kaydedilmiş oturum varsa sessizce geri yükle
   // (otomatik giriş yapmaz, sadece formu doldurur ve admin modunu açmaz;
@@ -1934,15 +2316,17 @@ function openAdminLoginOrPanel() {
       title: 'Yönetici Modu',
       html: `<div style="text-align:left;font-size:13px;line-height:1.6">
                <b>${escapeHtml(adminSession.owner)}/${escapeHtml(adminSession.repo)}</b> reposuna bağlısınız.<br>
-               Haritaya tıklayarak akaryakıt/restoran/konaklama noktası ekleyebilirsiniz.
+               Haritaya tıklayarak yeni bir tavsiye ekleyebilirsiniz. Mevcut bir tavsiyeye tıklayıp düzenleyebilir veya silebilirsiniz.
              </div>`,
       icon: 'info',
-      background: '#0d1218', color: '#e2e8f0',
+      
       showCancelButton: true,
       confirmButtonText: 'Haritada Yer Ekle',
       cancelButtonText: 'Çıkış Yap',
       confirmButtonColor: '#10b981',
       cancelButtonColor: '#334155',
+      showCloseButton: true,
+      closeButtonHtml: '&times;',
     }).then((result) => {
       if (result.isConfirmed) {
         setAdminModeActive(true);
@@ -1960,27 +2344,29 @@ function showAdminLoginForm() {
     title: 'Yönetici Girişi',
     html: `
       <div style="text-align:left;font-size:12.5px;line-height:1.5">
-        <label style="display:block;margin-bottom:3px;color:#94a3b8">GitHub Kullanıcı Adı</label>
+        <label style="display:block;margin-bottom:3px;color:var(--c-text-muted)">GitHub Kullanıcı Adı</label>
         <input id="admin-input-owner" class="swal2-input" placeholder="kullanici-adi" style="margin:0 0 10px 0">
-        <label style="display:block;margin-bottom:3px;color:#94a3b8">Repo Adı</label>
+        <label style="display:block;margin-bottom:3px;color:var(--c-text-muted)">Repo Adı</label>
         <input id="admin-input-repo" class="swal2-input" placeholder="repo-adi" style="margin:0 0 10px 0">
-        <label style="display:block;margin-bottom:3px;color:#94a3b8">Personal Access Token</label>
+        <label style="display:block;margin-bottom:3px;color:var(--c-text-muted)">Personal Access Token</label>
         <input id="admin-input-token" type="password" class="swal2-input" placeholder="ghp_..." style="margin:0 0 10px 0">
         <label style="display:flex;align-items:center;gap:6px;color:#94a3b8;margin-top:4px">
           <input id="admin-input-remember" type="checkbox" style="width:14px;height:14px;margin:0">
           Bu tarayıcıda beni hatırla
         </label>
-        <p style="color:#64748b;font-size:11px;margin-top:10px">
+        <p style="color:var(--c-text-dim);font-size:11px;margin-top:10px">
           Token yalnızca bu tarayıcıda tutulur, sitenin koduna hiçbir zaman yazılmaz.
           Yalnızca "Contents" yazma izni olan, bu repoya özel (fine-grained) bir token kullanmanız önerilir.
         </p>
       </div>`,
-    background: '#0d1218', color: '#e2e8f0',
+    
     confirmButtonText: 'Giriş Yap',
     confirmButtonColor: '#10b981',
     showCancelButton: true,
     cancelButtonText: 'Vazgeç',
     cancelButtonColor: '#334155',
+    showCloseButton: true,
+    closeButtonHtml: '&times;',
     focusConfirm: false,
     preConfirm: () => {
       const owner = document.getElementById('admin-input-owner').value.trim();
@@ -2003,7 +2389,7 @@ function showAdminLoginForm() {
 /** Token'ı GitHub'a karşı doğrular (repo erişimi var mı) ve başarılıysa oturumu açar. */
 async function attemptAdminLogin(owner, repo, token, remember) {
   Swal.fire({
-    title: 'Doğrulanıyor…', background: '#0d1218', color: '#e2e8f0',
+    title: 'Doğrulanıyor…', 
     didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false,
   });
 
@@ -2040,7 +2426,7 @@ async function attemptAdminLogin(owner, repo, token, remember) {
   } catch (err) {
     Swal.fire({
       title: 'Giriş Başarısız', text: err.message, icon: 'error',
-      background: '#0d1218', color: '#e2e8f0', confirmButtonColor: '#ef5a6f',
+      confirmButtonColor: '#ef4444',
     });
   }
 }
@@ -2081,118 +2467,318 @@ function logoutAdmin() {
  * adminModeActive true ise, normal davranıştan ÖNCE çağrılır.
  */
 async function handleAdminMapClick(lat, lng) {
-  const { value: formData } = await Swal.fire({
-    title: "Topsakal'dan Tavsiyeler — Yeni Yer Ekle",
+  const formData = await showPoiForm({ mode: 'add' });
+  if (!formData) return;
+
+  const id = `poi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const poi = {
+    id, lat, lng,
+    category: formData.category,
+    name: formData.name,
+    description: formData.description,
+    phone: formData.phone,
+    link: formData.link,
+    createdAt: new Date().toISOString(),
+  };
+
+  if (formData.photoFile) {
+    Swal.fire({ title: 'Fotoğraf yükleniyor…', didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false });
+    try { poi.photo = await uploadPoiPhoto(formData.photoFile, id); }
+    catch (err) {
+      Swal.close();
+      toast(`Fotoğraf yüklenemedi: ${err.message} Yer fotoğrafsız kaydedilecek.`, 'error');
+    }
+  }
+  await savePoiToGithub(poi);
+}
+
+/** Bir metni güvenli bir http(s) bağlantısına çevirir; geçersizse null döner. */
+function normalizeUrl(raw) {
+  const v = (raw || '').trim();
+  if (!v) return null;
+  const withProto = /^https?:\/\//i.test(v) ? v : `https://${v}`;
+  try { const u = new URL(withProto); return /^https?:$/.test(u.protocol) ? u.href : null; } catch (e) { return null; }
+}
+
+/** Telefonu yalnızca rakam ve + olacak şekilde temizler. */
+function normalizePhone(raw) {
+  const v = (raw || '').replace(/[^\d+]/g, '');
+  return v.length >= 7 ? v : null;
+}
+
+/**
+ * Ekleme ve düzenleme için ortak form. Onaylanırsa alanları, vazgeçilirse null döner.
+ * mode: 'add' | 'edit' — düzenlemede mevcut değerler önceden doldurulur.
+ */
+async function showPoiForm({ mode, poi = null }) {
+  const isEdit = mode === 'edit';
+  const v = (x) => escapeHtml(x || '');
+  const cats = Object.entries(ADMIN_POI_CATEGORIES)
+    .map(([key, c]) => `<option value="${key}" ${poi && poi.category === key ? 'selected' : ''}>${c.emoji || ''} ${c.label}</option>`)
+    .join('');
+  const currentPhoto = poi && poi.photo ? poiPhotoUrl(poi.photo) : null;
+  const lbl = 'display:block;margin-bottom:3px;color:var(--c-text-muted)';
+
+  const { value } = await Swal.fire({
+    title: isEdit ? 'Yeri Düzenle' : "Topsakal'dan Tavsiyeler — Yeni Yer Ekle",
     html: `
       <div style="text-align:left;font-size:12.5px;line-height:1.5">
-        <label style="display:block;margin-bottom:3px;color:#94a3b8">Tür</label>
-        <select id="admin-poi-category" class="swal2-input" style="margin:0 0 10px 0">
-          <option value="fuel">⛽ Akaryakıt İstasyonu</option>
-          <option value="restaurant">🍽️ Restoran</option>
-          <option value="hotel">🛏️ Konaklama</option>
-        </select>
-        <label style="display:block;margin-bottom:3px;color:#94a3b8">Ad</label>
-        <input id="admin-poi-name" class="swal2-input" placeholder="ör. Kardeşler Restoran" style="margin:0 0 10px 0">
-        <label style="display:block;margin-bottom:3px;color:#94a3b8">Açıklama</label>
-        <textarea id="admin-poi-desc" class="swal2-textarea" placeholder="Kısa bir açıklama…" style="margin:0"></textarea>
+        <label style="${lbl}">Tür</label>
+        <select id="admin-poi-category" class="swal2-input" style="margin:0 0 10px 0">${cats}</select>
+        <label style="${lbl}">Ad</label>
+        <input id="admin-poi-name" class="swal2-input" placeholder="ör. Kardeşler Restoran" value="${v(poi?.name)}" style="margin:0 0 10px 0">
+        <label style="${lbl}">Açıklama</label>
+        <textarea id="admin-poi-desc" class="swal2-textarea" placeholder="Kısa bir açıklama…" style="margin:0 0 10px 0">${v(poi?.description)}</textarea>
+        <label style="${lbl}">Telefon <span style="opacity:.7">(isteğe bağlı)</span></label>
+        <input id="admin-poi-phone" type="tel" class="swal2-input" placeholder="ör. 0462 123 45 67" value="${v(poi?.phone)}" style="margin:0 0 10px 0">
+        <label style="${lbl}">Bağlantı <span style="opacity:.7">(Instagram / Google Maps / web sitesi)</span></label>
+        <input id="admin-poi-link" type="url" class="swal2-input" placeholder="ör. instagram.com/mekan" value="${v(poi?.link)}" style="margin:0 0 10px 0">
+        <label style="${lbl}">Fotoğraf <span style="opacity:.7">(isteğe bağlı)</span></label>
+        ${currentPhoto ? `<img id="admin-poi-photo-current" src="${currentPhoto}" alt="" style="width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-bottom:6px" onerror="this.style.display='none'">` : ''}
+        <input id="admin-poi-photo" type="file" accept="image/*" class="swal2-input" style="margin:0;padding:8px;height:auto">
+        ${isEdit && poi?.photo ? `<label style="display:flex;align-items:center;gap:6px;margin-top:6px;color:var(--c-text-muted)"><input id="admin-poi-photo-remove" type="checkbox" style="width:14px;height:14px;margin:0"> Mevcut fotoğrafı kaldır</label>` : ''}
+        ${isEdit ? '' : ''}
       </div>`,
-    background: '#0d1218', color: '#e2e8f0',
-    confirmButtonText: 'Kaydet', confirmButtonColor: '#10b981',
+    confirmButtonText: isEdit ? 'Kaydet' : 'Kaydet', confirmButtonColor: '#10b981',
     showCancelButton: true, cancelButtonText: 'Vazgeç', cancelButtonColor: '#334155',
+    showCloseButton: true, closeButtonHtml: '&times;',
     focusConfirm: false,
     preConfirm: () => {
       const category = document.getElementById('admin-poi-category').value;
       const name = document.getElementById('admin-poi-name').value.trim();
       const description = document.getElementById('admin-poi-desc').value.trim();
+      const phoneRaw = document.getElementById('admin-poi-phone').value.trim();
+      const linkRaw = document.getElementById('admin-poi-link').value.trim();
+      const photoFile = document.getElementById('admin-poi-photo').files[0] || null;
+      const removePhoto = !!document.getElementById('admin-poi-photo-remove')?.checked;
+
       if (!name) { Swal.showValidationMessage('Ad alanı zorunludur.'); return false; }
-      return { category, name, description };
+      const phone = normalizePhone(phoneRaw);
+      if (phoneRaw && !phone) { Swal.showValidationMessage('Telefon numarası geçerli görünmüyor.'); return false; }
+      const link = normalizeUrl(linkRaw);
+      if (linkRaw && !link) { Swal.showValidationMessage('Bağlantı geçerli bir web adresi olmalı.'); return false; }
+      if (photoFile && photoFile.size > 15 * 1024 * 1024) { Swal.showValidationMessage('Fotoğraf çok büyük (en fazla 15 MB).'); return false; }
+      return { category, name, description, phone, link, photoFile, removePhoto };
     },
   });
+  return value || null;
+}
 
-  if (!formData) return;
+/** Düzenleme akışı: formu aç, fotoğraf değişikliklerini işle, kaydet. */
+async function editPoi(id) {
+  const poi = state.adminPois.find((p) => p.id === id);
+  if (!poi) return;
+  map.closePopup();
+  const f = await showPoiForm({ mode: 'edit', poi });
+  if (!f) return;
 
-  const poi = {
-    id: `poi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    category: formData.category,
-    name: formData.name,
-    description: formData.description,
-    lat, lng,
-    createdAt: new Date().toISOString(),
+  const changes = {
+    category: f.category, name: f.name, description: f.description,
+    phone: f.phone || null, link: f.link || null,
   };
 
-  await savePoiToGithub(poi);
+  if (f.photoFile) {
+    Swal.fire({ title: 'Fotoğraf yükleniyor…', didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false });
+    try {
+      changes.photo = await uploadPoiPhoto(f.photoFile, id);
+      if (poi.photo) deletePoiPhoto(poi.photo); // eski fotoğrafı arka planda temizle
+    } catch (err) {
+      Swal.close();
+      toast(`Fotoğraf yüklenemedi: ${err.message}`, 'error');
+    }
+  } else if (f.removePhoto && poi.photo) {
+    changes.photo = null;
+    deletePoiPhoto(poi.photo);
+  }
+  await updatePoiOnGithub(id, changes);
+}
+
+window.__editPoi = (id) => editPoi(id);
+window.__deletePoi = (id) => { map.closePopup(); deletePoiOnGithub(id); };
+
+/* ---------- GitHub yardımcıları (oku → değiştir → yaz) ---------- */
+const POI_PHOTO_DIR = 'poi-photos';
+
+function ghHeaders() {
+  return { Authorization: `Bearer ${adminSession.token}`, Accept: 'application/vnd.github+json' };
+}
+function ghContentsUrl(path) {
+  const { owner, repo } = adminSession;
+  const safePath = path.split('/').map(encodeURIComponent).join('/');
+  return `${ENDPOINTS.github}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${safePath}`;
 }
 
 /**
- * Yeni POI'yi GitHub'daki pois.json dosyasına ekler.
- * Akış: mevcut dosyayı (varsa) SHA'sıyla birlikte oku → diziye ekle → PUT ile commit et.
- * GitHub Contents API SHA tabanlı bir "optimistic concurrency" kullanır: dosyayı
- * güncellerken doğru SHA verilmezse (biri arada değiştirmişse) 409 döner; bu basit
- * tek-yöneticili kullanım için yeterli, ekstra bir kilitleme mekanizması eklemedik.
+ * pois.json'u okuyup `mutator(mevcutDizi)` ile değiştirir ve commit eder.
+ * mutator yeni diziyi döndürmelidir. GitHub SHA tabanlı çakışma denetimi yapar;
+ * bu yüzden 409 (biri arada değiştirdi) gelirse bir kez otomatik yeniden denenir.
  */
-async function savePoiToGithub(poi) {
-  const loading = Swal.fire({
-    title: 'Kaydediliyor…', background: '#0d1218', color: '#e2e8f0',
-    didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false,
-  });
+async function mutatePoisOnGithub(mutator, commitMessage, attempt = 0) {
+  const { branch } = adminSession;
+  const apiUrl = ghContentsUrl(POI_FILE_PATH);
 
-  try {
-    const { owner, repo, token, branch } = adminSession;
-    const apiBase = `${ENDPOINTS.github}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${POI_FILE_PATH}`;
-    const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' };
-
-    // 1) Mevcut dosyayı oku (varsa SHA'sını almak için)
-    let existingPois = [];
-    let sha = null;
-    const getRes = await fetchWithTimeout(`${apiBase}?ref=${encodeURIComponent(branch)}`, { headers }, 10000);
-    if (getRes.status === 200) {
-      const fileData = await getRes.json();
-      sha = fileData.sha;
-      try {
-        const decoded = decodeURIComponent(escape(atob(fileData.content.replace(/\n/g, ''))));
-        const parsed = JSON.parse(decoded);
-        if (Array.isArray(parsed)) existingPois = parsed;
-      } catch (e) {
-        console.warn('pois.json ayrıştırılamadı, sıfırdan oluşturuluyor:', e.message);
-      }
-    } else if (getRes.status !== 404) {
-      throw new Error(`Dosya okunamadı (HTTP ${getRes.status})`);
+  let existing = [];
+  let sha = null;
+  const getRes = await fetchWithTimeout(`${apiUrl}?ref=${encodeURIComponent(branch)}`, { headers: ghHeaders() }, 10000);
+  if (getRes.status === 200) {
+    const fileData = await getRes.json();
+    sha = fileData.sha;
+    try {
+      const decoded = decodeURIComponent(escape(atob(fileData.content.replace(/\n/g, ''))));
+      const parsed = JSON.parse(decoded);
+      if (Array.isArray(parsed)) existing = parsed;
+    } catch (e) {
+      console.warn('pois.json ayrıştırılamadı, sıfırdan oluşturuluyor:', e.message);
     }
-    // 404 ise dosya henüz yok — sha=null göndererek yeni dosya oluşturulacak
+  } else if (getRes.status !== 404) {
+    throw new Error(`Dosya okunamadı (HTTP ${getRes.status})`);
+  }
 
-    // 2) Yeni POI'yi ekle
-    const updatedPois = [...existingPois, poi];
-    const newContentB64 = btoa(unescape(encodeURIComponent(JSON.stringify(updatedPois, null, 2))));
+  const updated = mutator(existing);
+  const putBody = {
+    message: commitMessage,
+    content: btoa(unescape(encodeURIComponent(JSON.stringify(updated, null, 2)))),
+    branch,
+  };
+  if (sha) putBody.sha = sha;
 
-    // 3) PUT ile commit et
-    const putBody = {
-      message: `Yeni yer eklendi: ${poi.name} (${ADMIN_POI_CATEGORIES[poi.category]?.label || poi.category})`,
-      content: newContentB64,
-      branch,
+  const putRes = await fetchWithTimeout(apiUrl, {
+    method: 'PUT',
+    headers: { ...ghHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(putBody),
+  }, 15000);
+
+  if (putRes.status === 409 && attempt < 1) {
+    return mutatePoisOnGithub(mutator, commitMessage, attempt + 1);
+  }
+  if (!putRes.ok) {
+    const errBody = await putRes.json().catch(() => ({}));
+    throw new Error(errBody.message || `Kaydetme başarısız (HTTP ${putRes.status})`);
+  }
+  return updated;
+}
+
+/** Fotoğrafı tarayıcıda küçültüp JPEG'e sıkıştırır (uzun kenar ≤ 1200px) ve base64 döndürür. */
+function compressImageToBase64(file, maxSide = 1200, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', quality).split(',')[1]);
     };
-    if (sha) putBody.sha = sha;
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Fotoğraf okunamadı.')); };
+    img.src = url;
+  });
+}
 
-    const putRes = await fetchWithTimeout(apiBase, {
-      method: 'PUT',
-      headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify(putBody),
-    }, 15000);
+/** Sıkıştırılmış fotoğrafı repoya ayrı dosya olarak yükler, göreli yolunu döndürür. */
+async function uploadPoiPhoto(file, poiId) {
+  const b64 = await compressImageToBase64(file);
+  const path = `${POI_PHOTO_DIR}/${poiId}_${Date.now()}.jpg`;
+  const res = await fetchWithTimeout(ghContentsUrl(path), {
+    method: 'PUT',
+    headers: { ...ghHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: `Fotoğraf eklendi: ${poiId}`, content: b64, branch: adminSession.branch }),
+  }, 30000);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Fotoğraf yüklenemedi (HTTP ${res.status})`);
+  }
+  return path;
+}
 
-    if (!putRes.ok) {
-      const errBody = await putRes.json().catch(() => ({}));
-      throw new Error(errBody.message || `Kaydetme başarısız (HTTP ${putRes.status})`);
-    }
+/** Repodaki fotoğraf yolunu herkese açık (anahtarsız) URL'ye çevirir. */
+function poiPhotoUrl(path) {
+  const pub = adminSession || readPublicRepoInfo();
+  if (!pub || !path) return null;
+  return `https://raw.githubusercontent.com/${encodeURIComponent(pub.owner)}/${encodeURIComponent(pub.repo)}/${encodeURIComponent(pub.branch || 'main')}/${path}`;
+}
+function readPublicRepoInfo() {
+  try { return JSON.parse(localStorage.getItem(ADMIN_PUBLIC_REPO_STORAGE_KEY)); } catch (e) { return null; }
+}
 
+/** Fotoğraf silme (en iyi çaba — hata olursa kayıt silme işlemini engellemez). */
+async function deletePoiPhoto(path) {
+  if (!path) return;
+  try {
+    const url = `${ghContentsUrl(path)}?ref=${encodeURIComponent(adminSession.branch)}`;
+    const g = await fetchWithTimeout(url, { headers: ghHeaders() }, 10000);
+    if (!g.ok) return;
+    const { sha } = await g.json();
+    await fetchWithTimeout(ghContentsUrl(path), {
+      method: 'DELETE',
+      headers: { ...ghHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'Fotoğraf silindi', sha, branch: adminSession.branch }),
+    }, 12000);
+  } catch (e) { console.warn('Fotoğraf silinemedi:', e.message); }
+}
+
+/** Yeni POI ekle. */
+async function savePoiToGithub(poi) {
+  Swal.fire({ title: 'Kaydediliyor…', didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false });
+  try {
+    const updated = await mutatePoisOnGithub(
+      (list) => [...list, poi],
+      `Yeni yer eklendi: ${poi.name} (${ADMIN_POI_CATEGORIES[poi.category]?.label || poi.category})`
+    );
     Swal.close();
-    state.adminPois = updatedPois;
-    renderAdminPois();
+    state.adminPois = updated;
+    refreshRecRouteMatches();
     toast(`"${poi.name}" eklendi ve GitHub'a kaydedildi.`, 'success');
   } catch (err) {
     Swal.close();
-    Swal.fire({
-      title: 'Kaydedilemedi', text: err.message, icon: 'error',
-      background: '#0d1218', color: '#e2e8f0', confirmButtonColor: '#ef5a6f',
-    });
+    Swal.fire({ title: 'Kaydedilemedi', text: err.message, icon: 'error', confirmButtonColor: '#ef4444' });
+  }
+}
+
+/** Var olan POI'yi güncelle (alan bazlı birleştirme). */
+async function updatePoiOnGithub(id, changes) {
+  Swal.fire({ title: 'Güncelleniyor…', didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false });
+  try {
+    const updated = await mutatePoisOnGithub(
+      (list) => list.map((p) => (p.id === id ? { ...p, ...changes, updatedAt: new Date().toISOString() } : p)),
+      `Yer güncellendi: ${changes.name || id}`
+    );
+    Swal.close();
+    state.adminPois = updated;
+    refreshRecRouteMatches();
+    toast('Değişiklikler kaydedildi.', 'success');
+  } catch (err) {
+    Swal.close();
+    Swal.fire({ title: 'Güncellenemedi', text: err.message, icon: 'error', confirmButtonColor: '#ef4444' });
+  }
+}
+
+/** POI'yi sil (onay ister; fotoğrafı da repodan temizler). */
+async function deletePoiOnGithub(id) {
+  const poi = state.adminPois.find((p) => p.id === id);
+  if (!poi) return;
+  const ok = await Swal.fire({
+    title: 'Bu yer silinsin mi?',
+    html: `<b>${escapeHtml(poi.name)}</b> kalıcı olarak silinecek.`,
+    icon: 'warning', showCancelButton: true, showCloseButton: true, closeButtonHtml: '&times;',
+    confirmButtonText: 'Evet, sil', cancelButtonText: 'Vazgeç',
+    confirmButtonColor: '#ef4444', cancelButtonColor: '#334155',
+  });
+  if (!ok.isConfirmed) return;
+
+  Swal.fire({ title: 'Siliniyor…', didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false });
+  try {
+    const updated = await mutatePoisOnGithub((list) => list.filter((p) => p.id !== id), `Yer silindi: ${poi.name}`);
+    await deletePoiPhoto(poi.photo);
+    Swal.close();
+    state.adminPois = updated;
+    refreshRecRouteMatches();
+    toast(`"${poi.name}" silindi.`, 'success');
+  } catch (err) {
+    Swal.close();
+    Swal.fire({ title: 'Silinemedi', text: err.message, icon: 'error', confirmButtonColor: '#ef4444' });
   }
 }
 
@@ -2213,7 +2799,7 @@ async function loadPublicPois(owner, repo, branch) {
     const pois = await res.json();
     if (Array.isArray(pois)) {
       state.adminPois = pois;
-      renderAdminPois();
+      refreshRecRouteMatches();
     }
   } catch (err) {
     console.warn('Herkese açık POI verisi alınamadı:', err.message);
@@ -2225,31 +2811,191 @@ async function loadPublicPois(owner, repo, branch) {
  * Tümü tek bir "Topsakal'dan Tavsiyeler" katmanına (adminPoiLayerGroup) eklenir;
  * bu katmanın haritada gösterilip gösterilmeyeceği adminPoiLayerVisible'a bağlıdır.
  */
+/* Filtre durumu: hangi kategoriler haritada görünsün (varsayılan: hepsi) */
+const recFilter = new Set(Object.keys(ADMIN_POI_CATEGORIES));
+// Rotaya yakın tavsiye kimlikleri (rota hesaplanınca güncellenir)
+let recNearRouteIds = new Set();
+const REC_ROUTE_RADIUS_M = 3000; // rotaya 3 km'ye kadar yakın olanlar "rota üzerinde" sayılır
+
+function buildRecPopupHtml(poi, cat) {
+  const inRoute = state.stops.some((st) => Math.abs(st.lat - poi.lat) < 1e-6 && Math.abs(st.lng - poi.lng) < 1e-6);
+  const photoUrl = poi.photo ? poiPhotoUrl(poi.photo) : null;
+  const link = normalizeUrl(poi.link);
+  const phone = normalizePhone(poi.phone);
+  const nearBadge = recNearRouteIds.has(poi.id)
+    ? `<span class="rec-near-badge"><i class="fa-solid fa-route"></i> Rotanda</span>` : '';
+
+  return `
+    <div class="rec-popup">
+      ${photoUrl ? `<div class="rec-popup-photo"><img src="${photoUrl}" alt="" loading="lazy" onerror="this.parentNode.style.display='none'"></div>` : ''}
+      <div class="rec-popup-eyebrow">${escapeHtml(ADMIN_RECOMMENDATIONS_TITLE)} ${nearBadge}</div>
+      <div class="rec-popup-row">
+        <div class="rec-popup-info">
+          <div class="rec-popup-name">${escapeHtml(poi.name)}</div>
+          <div class="rec-popup-cat"><i class="fa-solid ${cat.icon}" style="color:${cat.color}"></i>${escapeHtml(cat.label)}</div>
+        </div>
+        <button type="button" class="rec-directions-btn" onclick="window.__openDirections(${Number(poi.lat)}, ${Number(poi.lng)})"
+                title="Yol tarifi" aria-label="Yol tarifi al">
+          <i class="fa-solid fa-diamond-turn-right"></i>
+        </button>
+      </div>
+      ${poi.description ? `<div class="rec-popup-desc">${escapeHtml(poi.description)}</div>` : ''}
+      <div class="rec-popup-actions">
+        <button type="button" class="rec-act-btn ${inRoute ? 'is-added' : ''}" onclick="window.__addRecToRoute('${escapeHtml(poi.id)}')"
+                title="${inRoute ? 'Rotada' : 'Rotaya durak olarak ekle'}" aria-label="Rotaya ekle" ${inRoute ? 'disabled' : ''}>
+          <i class="fa-solid ${inRoute ? 'fa-check' : 'fa-plus'}"></i>
+        </button>
+        ${phone ? `<a class="rec-act-btn" href="tel:${phone}" title="Ara" aria-label="Ara"><i class="fa-solid fa-phone"></i></a>` : ''}
+        ${link ? `<a class="rec-act-btn" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" title="Bağlantıyı aç" aria-label="Bağlantıyı aç"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>` : ''}
+        ${adminSession ? `
+          <span class="rec-act-spacer"></span>
+          <button type="button" class="rec-act-btn rec-act-admin" onclick="window.__editPoi('${escapeHtml(poi.id)}')" title="Düzenle" aria-label="Düzenle"><i class="fa-solid fa-pen"></i></button>
+          <button type="button" class="rec-act-btn rec-act-danger" onclick="window.__deletePoi('${escapeHtml(poi.id)}')" title="Sil" aria-label="Sil"><i class="fa-solid fa-trash-can"></i></button>` : ''}
+      </div>
+    </div>`;
+}
+
 function renderAdminPois() {
   if (!adminPoiLayerGroup) return;
   adminPoiLayerGroup.clearLayers();
 
   state.adminPois.forEach((poi) => {
+    if (!recFilter.has(poi.category)) return; // filtre dışında kalan kategoriler gösterilmez
     const cat = ADMIN_POI_CATEGORIES[poi.category] || { label: poi.category, icon: 'fa-location-dot', color: '#94a3b8' };
+    const near = recNearRouteIds.has(poi.id);
     const icon = L.divIcon({
       className: 'admin-poi-marker',
-      html: `<div style="width:28px;height:28px;border-radius:50%;background:${cat.color};display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.4);border:2px solid rgba(255,255,255,.85)">
-               <i class="fa-solid ${cat.icon}" style="color:#0d1218;font-size:12px"></i>
+      html: `<div class="rec-marker ${near ? 'rec-marker-near' : ''}" style="background:${cat.color}">
+               <i class="fa-solid ${cat.icon}"></i>
              </div>`,
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
     });
-    const marker = L.marker([poi.lat, poi.lng], { icon }).bindPopup(`
-      <div style="min-width:180px">
-        <div style="font-weight:700;font-size:11px;letter-spacing:.02em;color:#f59e0b;margin-bottom:3px;text-transform:uppercase">${escapeHtml(ADMIN_RECOMMENDATIONS_TITLE)}</div>
-        <div style="font-weight:700;font-size:13px;margin-bottom:2px">${escapeHtml(poi.name)}</div>
-        <div style="font-size:11px;color:#64748b;margin-bottom:4px">${escapeHtml(cat.label)}</div>
-        ${poi.description ? `<div style="font-size:12px">${escapeHtml(poi.description)}</div>` : ''}
-      </div>
-    `);
+    const marker = L.marker([poi.lat, poi.lng], { icon, zIndexOffset: near ? 500 : 0 });
+    // Popup içeriği açılırken üretilir; böylece "rotada mı", "yönetici mi" gibi durumlar her zaman güncel olur
+    marker.bindPopup(() => buildRecPopupHtml(poi, cat), { closeButton: false, className: 'rec-popup-wrap', minWidth: 240, maxWidth: 300, autoPanPadding: [20, 70] });
     marker.addTo(adminPoiLayerGroup);
   });
+  updateRecFilterUI();
 }
+
+/* ---------- Kategori filtre çipleri ---------- */
+function buildRecFilterBar() {
+  const bar = document.getElementById('rec-filter-bar');
+  if (!bar) return;
+  bar.innerHTML = Object.entries(ADMIN_POI_CATEGORIES).map(([key, c]) => `
+    <button type="button" class="rec-chip" data-cat="${key}" aria-pressed="true" title="${escapeHtml(c.label)}">
+      <i class="fa-solid ${c.icon}" style="--chip-color:${c.color}"></i><span>${escapeHtml(c.shortLabel || c.label)}</span>
+    </button>`).join('');
+  bar.querySelectorAll('.rec-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const key = chip.dataset.cat;
+      if (recFilter.has(key)) recFilter.delete(key); else recFilter.add(key);
+      renderAdminPois();
+    });
+  });
+}
+
+function updateRecFilterUI() {
+  const bar = document.getElementById('rec-filter-bar');
+  if (!bar) return;
+  bar.classList.toggle('hidden', !adminPoiLayerVisible);
+  bar.querySelectorAll('.rec-chip').forEach((chip) => {
+    const key = chip.dataset.cat;
+    const count = state.adminPois.filter((p) => p.category === key).length;
+    const on = recFilter.has(key);
+    chip.classList.toggle('is-off', !on);
+    chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+    chip.classList.toggle('is-empty', count === 0);
+  });
+}
+
+/* ---------- Rotaya durak olarak ekle ---------- */
+window.__addRecToRoute = async function (id) {
+  const poi = state.adminPois.find((p) => p.id === id);
+  if (!poi) return;
+  map.closePopup();
+  await addStopDirect(poi.lat, poi.lng, poi.name, ADMIN_POI_CATEGORIES[poi.category]?.label || '', false);
+  refreshRecRouteMatches();
+};
+
+/* ---------- Rotadaki tavsiyeler ---------- */
+/** Bir noktanın, rota çizgisinin (segmentlerin) en yakın noktasına metre cinsinden uzaklığı. */
+function distanceToPolylineM(lat, lng, coords) {
+  // coords: [[lng,lat],...] — küçük mesafeler için düzlemsel (equirectangular) yaklaşım yeterli
+  const kLat = 111320;
+  const kLng = 111320 * Math.cos((lat * Math.PI) / 180);
+  let min = Infinity;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const ax = (coords[i][0] - lng) * kLng, ay = (coords[i][1] - lat) * kLat;
+    const bx = (coords[i + 1][0] - lng) * kLng, by = (coords[i + 1][1] - lat) * kLat;
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 ? -(ax * dx + ay * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const d = Math.hypot(ax + t * dx, ay + t * dy);
+    if (d < min) min = d;
+  }
+  return min;
+}
+
+/** Rota değişince (veya tavsiyeler yüklenince) hangi tavsiyelerin rotaya yakın olduğunu yeniden hesaplar. */
+function refreshRecRouteMatches() {
+  recNearRouteIds = new Set();
+  const coords = state.routeGeoJSON?.coordinates;
+  if (coords && coords.length > 1) {
+    // Hızlı ön eleme için rotanın kutusu (bbox) ile başla
+    let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+    coords.forEach(([lng, lat]) => {
+      if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
+      if (lng < minLng) minLng = lng; if (lng > maxLng) maxLng = lng;
+    });
+    const pad = (REC_ROUTE_RADIUS_M / 111000) * 1.6;
+    state.adminPois.forEach((poi) => {
+      if (poi.lat < minLat - pad || poi.lat > maxLat + pad || poi.lng < minLng - pad * 1.6 || poi.lng > maxLng + pad * 1.6) return;
+      if (distanceToPolylineM(poi.lat, poi.lng, coords) <= REC_ROUTE_RADIUS_M) recNearRouteIds.add(poi.id);
+    });
+  }
+  renderAdminPois();
+  renderRecRouteBanner();
+}
+
+/** Rota üzerinde tavsiye varsa panelde bilgilendirici şerit gösterir. */
+function renderRecRouteBanner() {
+  const el = document.getElementById('rec-route-banner');
+  if (!el) return;
+  const n = recNearRouteIds.size;
+  if (!n || !state.routeGeoJSON) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <div class="rec-banner-icon"><i class="fa-solid fa-star"></i></div>
+    <div class="rec-banner-text"><b>Rotanda ${n} tavsiye var</b><span>Topsakal'ın önerdiği yerleri haritada gör</span></div>
+    <button type="button" id="rec-banner-show" class="rec-banner-btn" aria-label="Haritada göster"><i class="fa-solid fa-chevron-right"></i></button>`;
+  document.getElementById('rec-banner-show').addEventListener('click', showRouteRecommendations);
+}
+
+/** Tavsiyeleri açar, filtreyi sıfırlar ve rotadaki tavsiyeleri kapsayan görünüme gider. */
+function showRouteRecommendations() {
+  if (!adminPoiLayerVisible) toggleAdminPoiLayer();
+  Object.keys(ADMIN_POI_CATEGORIES).forEach((k) => recFilter.add(k));
+  renderAdminPois();
+  const pts = state.adminPois.filter((p) => recNearRouteIds.has(p.id)).map((p) => [p.lat, p.lng]);
+  if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.35), { maxZoom: 15 });
+  if (isMobileViewport()) closeDrawer(); // mobilde haritayı görebilmek için paneli indir
+}
+
+/**
+ * Yol tarifi: cihazın harita uygulamasında navigasyonu başlatır.
+ * iOS/macOS'ta Apple Maps, diğerlerinde Google Maps evrensel bağlantısı açılır;
+ * başlangıç noktası boş bırakıldığı için uygulama kullanıcının anlık konumunu kullanır.
+ */
+window.__openDirections = function (lat, lng) {
+  const isApple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent) && 'ontouchend' in document;
+  const url = isApple
+    ? `https://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`
+    : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
+  window.open(url, '_blank', 'noopener');
+};
 
 /** "Topsakal'dan Tavsiyeler" katmanını haritada aç/kapat eder. */
 function toggleAdminPoiLayer() {
@@ -2259,8 +3005,16 @@ function toggleAdminPoiLayer() {
   } else {
     map.removeLayer(adminPoiLayerGroup);
   }
+  syncRecommendationsButton();
+  updateRecFilterUI();
+}
+
+/** 'Tavsiyeler' düğmesinin aktif/pasif görünümünü katman durumuna göre günceller. */
+function syncRecommendationsButton() {
   const btn = document.getElementById('btn-toggle-recommendations');
-  if (btn) btn.classList.toggle('opacity-50', !adminPoiLayerVisible);
+  if (!btn) return;
+  btn.classList.toggle('rec-active', adminPoiLayerVisible);
+  btn.setAttribute('aria-pressed', adminPoiLayerVisible ? 'true' : 'false');
 }
 
 async function onMapClick(e) {
@@ -2490,8 +3244,6 @@ function clearAllStops() {
     showCancelButton: true,
     confirmButtonText: 'Evet, temizle',
     cancelButtonText: 'Vazgeç',
-    background: '#0d1218',
-    color: '#e2e8f0',
     confirmButtonColor: '#ef5a6f',
     cancelButtonColor: '#334155',
   }).then((result) => {
@@ -2819,6 +3571,7 @@ function applySelectedRoute(index) {
   renderRouteSummary();
   updateFuelCalculation();
   updateAltRouteSelectionUI();
+  refreshRecRouteMatches();
 
   routeSummarySection.classList.remove('hidden');
   fuelSection.classList.remove('hidden');
@@ -2992,6 +3745,7 @@ function clearRouteVisuals() {
   state.elevationPoints = [];
   state.routeAlternatives = [];
   state.selectedRouteIndex = 0;
+  if (typeof refreshRecRouteMatches === 'function') refreshRecRouteMatches();
   if (elevationChart) { elevationChart.destroy(); elevationChart = null; }
   const gradeEffectRow = document.getElementById('grade-effect-row');
   if (gradeEffectRow) gradeEffectRow.classList.add('hidden');
@@ -3660,13 +4414,22 @@ function computeElevationMetrics(points) {
   elevMaxEl.textContent = formatElevation(max);
 }
 
+/** Tema değişkenini okur (Chart.js canvas'ı CSS değişkeni anlamadığı için gerçek değer gerekir). */
+function themeVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
 function renderElevationChart(points) {
   const ctx = document.getElementById('elevation-chart').getContext('2d');
   if (elevationChart) elevationChart.destroy();
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const lineColor = isLight ? '#059669' : '#3ddc97';
+  const tickColor = themeVar('--c-text-dim');
+  const gridColor = isLight ? 'rgba(15,23,42,0.09)' : 'rgba(148,176,199,0.08)';
 
   const gradient = ctx.createLinearGradient(0, 0, 0, 140);
-  gradient.addColorStop(0, 'rgba(61, 220, 151, 0.45)');
-  gradient.addColorStop(1, 'rgba(61, 220, 151, 0.02)');
+  gradient.addColorStop(0, isLight ? 'rgba(16, 185, 129, 0.38)' : 'rgba(61, 220, 151, 0.45)');
+  gradient.addColorStop(1, isLight ? 'rgba(16, 185, 129, 0.02)' : 'rgba(61, 220, 151, 0.02)');
 
   elevationChart = new Chart(ctx, {
     type: 'line',
@@ -3674,13 +4437,13 @@ function renderElevationChart(points) {
       labels: points.map((p) => formatDistance(p.distanceAlongRoute)),
       datasets: [{
         data: points.map((p) => state.unitSystem === 'imperial' ? p.elevation * 3.28084 : p.elevation),
-        borderColor: '#3ddc97',
+        borderColor: lineColor,
         backgroundColor: gradient,
         borderWidth: 2,
         pointRadius: 0,
         pointHoverRadius: 5,
-        pointHoverBackgroundColor: '#3ddc97',
-        pointHoverBorderColor: '#06120c',
+        pointHoverBackgroundColor: lineColor,
+        pointHoverBorderColor: isLight ? '#ffffff' : '#06120c',
         fill: true,
         tension: 0.35,
       }],
@@ -3692,11 +4455,11 @@ function renderElevationChart(points) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: '#0f151c',
-          borderColor: 'rgba(148,176,199,0.2)',
+          backgroundColor: themeVar('--c-popup'),
+          borderColor: themeVar('--c-border-strong'),
           borderWidth: 1,
-          titleColor: '#94a3b8',
-          bodyColor: '#f1f5f9',
+          titleColor: themeVar('--c-text-muted'),
+          bodyColor: themeVar('--c-text'),
           padding: 8,
           displayColors: false,
           callbacks: {
@@ -3707,14 +4470,14 @@ function renderElevationChart(points) {
       },
       scales: {
         x: {
-          ticks: { color: '#475569', font: { size: 9 }, maxTicksLimit: 6 },
+          ticks: { color: tickColor, font: { size: 9 }, maxTicksLimit: 6 },
           grid: { display: false },
-          title: { display: true, text: `Mesafe (${distanceUnitLabel()})`, color: '#64748b', font: { size: 9.5 } },
+          title: { display: true, text: `Mesafe (${distanceUnitLabel()})`, color: tickColor, font: { size: 9.5 } },
         },
         y: {
-          ticks: { color: '#475569', font: { size: 9 }, maxTicksLimit: 4 },
-          grid: { color: 'rgba(148,176,199,0.08)' },
-          title: { display: true, text: `Rakım (${state.unitSystem === 'imperial' ? 'ft' : 'm'})`, color: '#64748b', font: { size: 9.5 } },
+          ticks: { color: tickColor, font: { size: 9 }, maxTicksLimit: 4 },
+          grid: { color: gridColor },
+          title: { display: true, text: `Rakım (${state.unitSystem === 'imperial' ? 'ft' : 'm'})`, color: tickColor, font: { size: 9.5 } },
         },
       },
       onHover: (event, activeElements, chart) => {
@@ -4043,8 +4806,8 @@ async function searchPOIsAlongRoute() {
         const marker = L.marker([lat, lon], { icon: makePinIcon(type) });
         marker.bindPopup(`
           <b>${escapeHtml(name)}</b><br>
-          <span style="color:#94a3b8">${POI_LABELS[type]}</span>
-          ${el.tags?.['addr:street'] ? `<br><span style="color:#64748b;font-size:11px">${escapeHtml(el.tags['addr:street'])}</span>` : ''}
+          <span style="color:var(--c-text-muted)">${POI_LABELS[type]}</span>
+          ${el.tags?.['addr:street'] ? `<br><span style="color:var(--c-text-dim);font-size:11px">${escapeHtml(el.tags['addr:street'])}</span>` : ''}
         `);
         marker.addTo(poiLayerGroup);
         state.poiMarkers[type].push(marker);
@@ -4291,7 +5054,54 @@ function closeDrawer() {
   document.body.classList.remove('drawer-open');
 }
 
-drawerHandle.addEventListener('click', openDrawer);
+/* ---- Alt tutamacı yukarı sürükleyerek paneli açma ----
+   Tutamaç üzerinde yukarı doğru yeterli çekme (veya hızlı fırlatma) paneli açar.
+   Parmak hareket ederken panel, parmakla birlikte yükselir. Küçük dokunuşlar
+   (sürükleme olmadan) yine click ile paneli açar. */
+let handleDragStartY = 0;
+let handleDragDeltaY = 0;
+let handleDragStartTime = 0;
+let isDraggingHandle = false;
+let handleWasDragged = false;
+
+drawerHandle.addEventListener('touchstart', (e) => {
+  if (!isMobileViewport() || panelEl.classList.contains('open')) return;
+  isDraggingHandle = true;
+  handleWasDragged = false;
+  handleDragStartY = e.touches[0].clientY;
+  handleDragDeltaY = 0;
+  handleDragStartTime = Date.now();
+  panelEl.style.transition = 'none';
+}, { passive: true });
+
+drawerHandle.addEventListener('touchmove', (e) => {
+  if (!isDraggingHandle) return;
+  handleDragDeltaY = Math.max(0, handleDragStartY - e.touches[0].clientY); // sadece yukarı
+  if (handleDragDeltaY > 6) handleWasDragged = true;
+  const panelH = panelEl.getBoundingClientRect().height;
+  const offset = Math.max(0, panelH - handleDragDeltaY);
+  panelEl.style.transform = `translateY(${offset}px)`;
+}, { passive: true });
+
+function endHandleDrag() {
+  if (!isDraggingHandle) return;
+  isDraggingHandle = false;
+  panelEl.style.transition = '';
+  panelEl.style.transform = '';
+  const panelH = panelEl.getBoundingClientRect().height;
+  const elapsed = Math.max(1, Date.now() - handleDragStartTime);
+  const velocity = handleDragDeltaY / elapsed; // px/ms
+  if (handleDragDeltaY > panelH * 0.2 || (handleDragDeltaY > 30 && velocity > 0.4)) {
+    openDrawer();
+  }
+}
+drawerHandle.addEventListener('touchend', endHandleDrag);
+drawerHandle.addEventListener('touchcancel', endHandleDrag);
+
+drawerHandle.addEventListener('click', () => {
+  if (handleWasDragged) { handleWasDragged = false; return; } // sürükleme sonrası oluşan click'i yoksay
+  openDrawer();
+});
 document.getElementById('drawer-close').addEventListener('click', closeDrawer);
 
 /* ---- Panel'i parmakla aşağı kaydırarak kapatma (swipe-to-dismiss) ----
@@ -4345,13 +5155,59 @@ panelDragHandle.addEventListener('touchend', onPanelDragEnd);
 panelDragHandle.addEventListener('touchcancel', onPanelDragEnd);
 
 /* ============================================================
+   15b. AÇIK / KOYU TEMA
+   Tercih localStorage'da saklanır; kayıt yoksa sistem temasına uyulur.
+   Tema, <html data-theme="..."> ile CSS değişkenlerini değiştirir.
+   Harita katmanı temaya göre otomatik değişir (koyu ↔ standart) ama
+   kullanıcı katman düğmelerinden istediğini seçmeye devam edebilir.
+   ============================================================ */
+function currentTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+}
+
+function applyTheme(theme, { syncMap = true } = {}) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const meta = document.getElementById('meta-theme-color');
+  if (meta) meta.setAttribute('content', theme === 'light' ? '#f4f7fa' : '#080b10');
+  try { localStorage.setItem('rotalis_theme', theme); } catch (e) { /* geç */ }
+
+  // Harita katmanını temaya uydur (koyu tema → karanlık harita, açık tema → standart)
+  if (syncMap && map) {
+    const target = theme === 'dark' ? 'dark' : 'osm';
+    const btn = document.querySelector(`.layer-btn[data-layer="${target}"]`);
+    if (btn && state.currentBaseLayer !== target && state.currentBaseLayer !== 'topo') switchBaseLayer(target, btn);
+  }
+  // Yükselti grafiği canvas ile çizildiği için yeni renklerle yeniden çiz
+  if (state.elevationPoints && state.elevationPoints.length) renderElevationChart(state.elevationPoints);
+}
+
+function initTheme() {
+  document.getElementById('btn-theme-toggle').addEventListener('click', () => {
+    applyTheme(currentTheme() === 'light' ? 'dark' : 'light');
+  });
+  // Kullanıcı hiç tercih yapmadıysa sistem teması değişince takip et
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', (e) => {
+      let saved = null;
+      try { saved = localStorage.getItem('rotalis_theme'); } catch (err) { /* geç */ }
+      if (!saved) applyTheme(e.matches ? 'light' : 'dark');
+    });
+  }
+}
+
+/* ============================================================
    16. UYGULAMA BAŞLATMA
    ============================================================ */
 function init() {
   initMap();
-  if (isMobileViewport()) {
-    openDrawer();
+  initTheme();
+  // İlk açılışta harita katmanını kayıtlı temaya göre ayarla
+  if (currentTheme() === 'dark') {
+    const darkBtn = document.querySelector('.layer-btn[data-layer="dark"]');
+    if (darkBtn) switchBaseLayer('dark', darkBtn);
   }
+  // Mobilde panel kapalı başlar; kullanıcı alttaki tutamacı yukarı sürükleyerek
+  // (veya dokunarak) açar.
 
   // Daha önce girilmiş bir LocationIQ anahtarı varsa geri yükle (arama yedek zinciri için)
   try {
