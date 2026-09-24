@@ -789,6 +789,15 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   <!-- ============ HARİTA (tam ekran) ============ -->
   <div id="map" class="absolute inset-0 z-0"></div>
 
+  <!-- Yönetici modu aktifken görünen rozet: haritaya tıklayınca POI eklenir -->
+  <div id="admin-mode-badge" class="hidden fixed top-3 left-1/2 -translate-x-1/2 z-[1200] items-center gap-2 bg-emerald-500/95 text-ink text-xs font-semibold px-3.5 py-2 rounded-full shadow-lg shadow-emerald-500/30">
+    <i class="fa-solid fa-location-dot"></i>
+    <span>Yönetici Modu: Haritaya tıklayarak yer ekleyin</span>
+    <button id="admin-mode-exit" type="button" class="ml-1 w-5 h-5 rounded-full bg-ink/20 hover:bg-ink/35 flex items-center justify-center">
+      <i class="fa-solid fa-xmark text-[10px]"></i>
+    </button>
+  </div>
+
   <!-- Harita üstü sağ üst: Katman değiştirici -->
   <div id="layer-switcher" class="absolute top-4 right-4 z-[500] flex flex-col gap-2">
     <div class="glass-card rounded-2xl p-1.5 flex gap-1">
@@ -835,9 +844,10 @@ button:focus-visible, input:focus-visible, select:focus-visible {
       <span id="panel-grip" class="lg:hidden w-10 h-1 rounded-full bg-slate-500/60 mb-2.5"></span>
       <div class="w-full flex items-center justify-between">
         <div class="flex items-center gap-2.5">
-          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-accent2 flex items-center justify-center shadow-lg shadow-accent/20">
+          <button id="admin-logo-btn" type="button" class="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-accent2 flex items-center justify-center shadow-lg shadow-accent/20 relative focus:outline-none focus:ring-2 focus:ring-accent/50" title="Yönetici Girişi">
             <i class="fa-solid fa-route text-ink text-sm"></i>
-          </div>
+            <span id="admin-active-dot" class="hidden absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-panel"></span>
+          </button>
           <div>
             <h1 class="font-display font-bold text-[15px] leading-tight text-white">Rotasyon</h1>
             <p class="text-[11px] text-slate-400 leading-tight">Rota Optimizasyonu &amp; Gezi Planlama</p>
@@ -1092,6 +1102,7 @@ const ENDPOINTS = {
   ],
   elevation: 'https://api.open-elevation.com/api/v1/lookup',
   locationIq: 'https://us1.locationiq.com/v1/search',
+  github: 'https://api.github.com',
 };
 
 const WATER_TAGS = new Set(['water', 'bay', 'strait', 'glacier']);
@@ -1166,6 +1177,7 @@ const state = {
   elevationPoints: [], // [{lat, lng, elevation, distanceAlongRoute}]
   poiMarkers: { fuel: [], hotel: [], restaurant: [] },
   activePoiTypes: new Set(),
+  adminPois: [],             // GitHub repo'sundan okunan, yönetici tarafından eklenmiş özel yerler
   currentBaseLayer: 'osm',
   unitSystem: 'metric',       // 'metric' | 'imperial'
   routeAlternatives: [],       // OSRM'den dönen tüm rota seçenekleri
@@ -1181,6 +1193,7 @@ let routeLine = null;
 let routeOutline = null;
 let stopMarkersLayer = null;
 let poiLayerGroup = null;
+let adminPoiLayerGroup = null;
 let legLabelsLayer = null;
 let elevationCursorMarker = null;
 let elevationChart = null;
@@ -1310,6 +1323,7 @@ function initMap() {
 
   stopMarkersLayer = L.layerGroup().addTo(map);
   poiLayerGroup = L.layerGroup().addTo(map);
+  adminPoiLayerGroup = L.layerGroup().addTo(map);
   legLabelsLayer = L.layerGroup().addTo(map);
 
   document.getElementById('btn-zoom-in').addEventListener('click', () => map.zoomIn());
@@ -1322,6 +1336,8 @@ function initMap() {
   document.querySelectorAll('.layer-btn').forEach((btn) => {
     btn.addEventListener('click', () => switchBaseLayer(btn.dataset.layer, btn));
   });
+
+  initAdminSystem();
 }
 
 /**
@@ -1827,7 +1843,403 @@ function nominatimZoomForMapZoom(mapZoom) {
    ============================================================ */
 let isProcessingMapClick = false;
 
+/* ============================================================
+   YÖNETİCİ MODU — GitHub üzerinden kalıcı, paylaşılan POI yönetimi
+   ============================================================
+   Bu site tamamen istemci taraflı (sunucusuz) çalıştığı için "gerçek" bir
+   backend/kullanıcı sistemi yok. Bunun yerine, yönetici GitHub kişisel erişim
+   token'ını (Personal Access Token) kendi tarayıcısına girer; bu token HİÇBİR
+   ZAMAN kodun içine yazılmaz, sadece bellekte (ve "beni hatırla" seçiliyse
+   localStorage'da, yalnızca o tarayıcıda) tutulur. Token ile GitHub Contents
+   API'sine (api.github.com, CORS destekler) doğrudan tarayıcıdan istek atılıp
+   repo köküne pois.json dosyası okunur/güncellenir.
+
+   GÜVENLİK NOTU: localStorage'da tutulan token, o bilgisayara/tarayıcıya
+   fiziksel veya uzaktan erişimi olan biri tarafından okunabilir. Bu, sitenin
+   HTML'ine token'ı gömmekten (herkes görür) çok farklı ve makul bir risk
+   seviyesidir, ama sıfır risk değildir — token'ı yalnızca "Contents"
+   iznine sahip, tek bir repo'ya özel (fine-grained) bir token olarak
+   oluşturmanız şiddetle önerilir.
+
+   Herkese açık (okuma) tarafı: sayfa her açıldığında, daha önce bir
+   yöneticinin girdiği repo bilgisi varsa (localStorage'da GitHub bilgisi
+   olmayan ziyaretçiler için de) raw.githubusercontent.com üzerinden anahtarsız
+   olarak pois.json okunur ve haritaya eklenir — bu kısım token gerektirmez,
+   sadece repo/dosyanın herkese açık (public) olması yeterlidir.
+   ============================================================ */
+
+const ADMIN_AUTH_STORAGE_KEY = 'rotalis_admin_github_auth_v1';
+const ADMIN_PUBLIC_REPO_STORAGE_KEY = 'rotalis_public_repo_v1'; // herkese açık okuma için repo bilgisi (token içermez)
+const POI_FILE_PATH = 'pois.json';
+
+const ADMIN_POI_CATEGORIES = {
+  fuel: { label: 'Akaryakıt İstasyonu', icon: 'fa-gas-pump', color: '#f59e0b' },
+  restaurant: { label: 'Restoran', icon: 'fa-utensils', color: '#ef5a6f' },
+  hotel: { label: 'Konaklama', icon: 'fa-bed', color: '#38bdf8' },
+};
+
+// Admin oturumu — yalnızca bellekte tutulur (token dahil). Sayfa yenilenince
+// kaybolur; "beni hatırla" işaretliyse initAdminSystem() localStorage'dan geri yükler.
+let adminSession = null; // { owner, repo, token, branch }
+let adminModeActive = false;
+
+function initAdminSystem() {
+  document.getElementById('admin-logo-btn').addEventListener('click', openAdminLoginOrPanel);
+  document.getElementById('admin-mode-exit').addEventListener('click', deactivateAdminMode);
+
+  // "Beni hatırla" ile daha önce kaydedilmiş oturum varsa sessizce geri yükle
+  // (otomatik giriş yapmaz, sadece formu doldurur ve admin modunu açmaz;
+  // gerçek giriş kullanıcı "Giriş Yap"a bastığında doğrulanır).
+  try {
+    const saved = localStorage.getItem(ADMIN_AUTH_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && parsed.owner && parsed.repo && parsed.token) {
+        adminSession = { ...parsed, branch: parsed.branch || 'main' };
+        activateAdminMode(false); // sessizce aktive et, toast gösterme
+      }
+    }
+  } catch (e) { /* bozuk veri varsa yok say */ }
+
+  // Herkese açık POI okuma: yönetici hiç giriş yapmamış bir ziyaretçide bile
+  // daha önce PAYLAŞILAN bir repo/dosya varsa (bkz. not) POI'ler gösterilsin.
+  // Bu depolama yalnızca "owner/repo/branch" bilgisini tutar, TOKEN TUTMAZ.
+  try {
+    const pub = localStorage.getItem(ADMIN_PUBLIC_REPO_STORAGE_KEY);
+    if (pub) {
+      const { owner, repo, branch } = JSON.parse(pub);
+      if (owner && repo) loadPublicPois(owner, repo, branch || 'main');
+    }
+  } catch (e) { /* yok say */ }
+}
+
+/** Logoya tıklanınca: admin modu zaten aktifse paneli/çıkışı göster, değilse giriş formu aç. */
+function openAdminLoginOrPanel() {
+  if (adminSession) {
+    Swal.fire({
+      title: 'Yönetici Modu',
+      html: `<div style="text-align:left;font-size:13px;line-height:1.6">
+               <b>${escapeHtml(adminSession.owner)}/${escapeHtml(adminSession.repo)}</b> reposuna bağlısınız.<br>
+               Haritaya tıklayarak akaryakıt/restoran/konaklama noktası ekleyebilirsiniz.
+             </div>`,
+      icon: 'info',
+      background: '#0d1218', color: '#e2e8f0',
+      showCancelButton: true,
+      confirmButtonText: 'Haritada Yer Ekle',
+      cancelButtonText: 'Çıkış Yap',
+      confirmButtonColor: '#10b981',
+      cancelButtonColor: '#334155',
+    }).then((result) => {
+      if (result.isConfirmed) {
+        setAdminModeActive(true);
+      } else if (result.dismiss === Swal.DismissReason.cancel) {
+        logoutAdmin();
+      }
+    });
+    return;
+  }
+  showAdminLoginForm();
+}
+
+function showAdminLoginForm() {
+  Swal.fire({
+    title: 'Yönetici Girişi',
+    html: `
+      <div style="text-align:left;font-size:12.5px;line-height:1.5">
+        <label style="display:block;margin-bottom:3px;color:#94a3b8">GitHub Kullanıcı Adı</label>
+        <input id="admin-input-owner" class="swal2-input" placeholder="kullanici-adi" style="margin:0 0 10px 0">
+        <label style="display:block;margin-bottom:3px;color:#94a3b8">Repo Adı</label>
+        <input id="admin-input-repo" class="swal2-input" placeholder="repo-adi" style="margin:0 0 10px 0">
+        <label style="display:block;margin-bottom:3px;color:#94a3b8">Personal Access Token</label>
+        <input id="admin-input-token" type="password" class="swal2-input" placeholder="ghp_..." style="margin:0 0 10px 0">
+        <label style="display:flex;align-items:center;gap:6px;color:#94a3b8;margin-top:4px">
+          <input id="admin-input-remember" type="checkbox" style="width:14px;height:14px;margin:0">
+          Bu tarayıcıda beni hatırla
+        </label>
+        <p style="color:#64748b;font-size:11px;margin-top:10px">
+          Token yalnızca bu tarayıcıda tutulur, sitenin koduna hiçbir zaman yazılmaz.
+          Yalnızca "Contents" yazma izni olan, bu repoya özel (fine-grained) bir token kullanmanız önerilir.
+        </p>
+      </div>`,
+    background: '#0d1218', color: '#e2e8f0',
+    confirmButtonText: 'Giriş Yap',
+    confirmButtonColor: '#10b981',
+    showCancelButton: true,
+    cancelButtonText: 'Vazgeç',
+    cancelButtonColor: '#334155',
+    focusConfirm: false,
+    preConfirm: () => {
+      const owner = document.getElementById('admin-input-owner').value.trim();
+      const repo = document.getElementById('admin-input-repo').value.trim();
+      const token = document.getElementById('admin-input-token').value.trim();
+      const remember = document.getElementById('admin-input-remember').checked;
+      if (!owner || !repo || !token) {
+        Swal.showValidationMessage('Kullanıcı adı, repo adı ve token zorunludur.');
+        return false;
+      }
+      return { owner, repo, token, remember };
+    },
+  }).then(async (result) => {
+    if (!result.isConfirmed) return;
+    const { owner, repo, token, remember } = result.value;
+    await attemptAdminLogin(owner, repo, token, remember);
+  });
+}
+
+/** Token'ı GitHub'a karşı doğrular (repo erişimi var mı) ve başarılıysa oturumu açar. */
+async function attemptAdminLogin(owner, repo, token, remember) {
+  Swal.fire({
+    title: 'Doğrulanıyor…', background: '#0d1218', color: '#e2e8f0',
+    didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false,
+  });
+
+  try {
+    const res = await fetchWithTimeout(`${ENDPOINTS.github}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+    }, 10000);
+
+    if (res.status === 401) throw new Error('Token geçersiz veya süresi dolmuş.');
+    if (res.status === 404) throw new Error('Repo bulunamadı veya bu token erişime sahip değil.');
+    if (!res.ok) throw new Error(`GitHub hata kodu: ${res.status}`);
+
+    const repoData = await res.json();
+    const branch = repoData.default_branch || 'main';
+
+    // Yazma izni var mı kontrol et (permissions alanı repo sahibi/işbirlikçi tokenlarında döner)
+    if (repoData.permissions && repoData.permissions.push === false) {
+      throw new Error('Bu token repoya yazma izni vermiyor (push yetkisi yok).');
+    }
+
+    adminSession = { owner, repo, token, branch };
+    Swal.close();
+
+    if (remember) {
+      try { localStorage.setItem(ADMIN_AUTH_STORAGE_KEY, JSON.stringify(adminSession)); }
+      catch (e) { /* localStorage dolu/kapalı olabilir, sessizce geç */ }
+    }
+    // Herkese açık okuma için repo bilgisini (token OLMADAN) ayrıca sakla —
+    // böylece bu tarayıcıda başka biri de (giriş yapmadan) POI'leri görebilir.
+    try { localStorage.setItem(ADMIN_PUBLIC_REPO_STORAGE_KEY, JSON.stringify({ owner, repo, branch })); }
+    catch (e) { /* geç */ }
+
+    activateAdminMode(true);
+  } catch (err) {
+    Swal.fire({
+      title: 'Giriş Başarısız', text: err.message, icon: 'error',
+      background: '#0d1218', color: '#e2e8f0', confirmButtonColor: '#ef5a6f',
+    });
+  }
+}
+
+function activateAdminMode(showToastMsg) {
+  document.getElementById('admin-active-dot').classList.remove('hidden');
+  loadPublicPois(adminSession.owner, adminSession.repo, adminSession.branch);
+  if (showToastMsg) toast(`${adminSession.owner}/${adminSession.repo} reposuna bağlanıldı.`, 'success', 'Yönetici Girişi');
+}
+
+function setAdminModeActive(isActive) {
+  adminModeActive = isActive;
+  const badge = document.getElementById('admin-mode-badge');
+  if (isActive) {
+    badge.classList.remove('hidden');
+    badge.classList.add('flex');
+  } else {
+    badge.classList.add('hidden');
+    badge.classList.remove('flex');
+  }
+}
+
+function deactivateAdminMode() {
+  setAdminModeActive(false);
+}
+
+function logoutAdmin() {
+  adminSession = null;
+  setAdminModeActive(false);
+  document.getElementById('admin-active-dot').classList.add('hidden');
+  try { localStorage.removeItem(ADMIN_AUTH_STORAGE_KEY); } catch (e) { /* geç */ }
+  toast('Yönetici oturumu kapatıldı.', 'info');
+}
+
+/**
+ * Yönetici modundayken haritaya tıklama, normal durak eklemek yerine
+ * yeni bir POI (yer) ekleme formu açar. Bu fonksiyon onMapClick içinden,
+ * adminModeActive true ise, normal davranıştan ÖNCE çağrılır.
+ */
+async function handleAdminMapClick(lat, lng) {
+  const { value: formData } = await Swal.fire({
+    title: 'Yeni Yer Ekle',
+    html: `
+      <div style="text-align:left;font-size:12.5px;line-height:1.5">
+        <label style="display:block;margin-bottom:3px;color:#94a3b8">Kategori</label>
+        <select id="admin-poi-category" class="swal2-input" style="margin:0 0 10px 0">
+          <option value="fuel">⛽ Akaryakıt İstasyonu</option>
+          <option value="restaurant">🍽️ Restoran</option>
+          <option value="hotel">🛏️ Konaklama</option>
+        </select>
+        <label style="display:block;margin-bottom:3px;color:#94a3b8">Ad</label>
+        <input id="admin-poi-name" class="swal2-input" placeholder="ör. Kardeşler Restoran" style="margin:0 0 10px 0">
+        <label style="display:block;margin-bottom:3px;color:#94a3b8">Açıklama</label>
+        <textarea id="admin-poi-desc" class="swal2-textarea" placeholder="Kısa bir açıklama…" style="margin:0"></textarea>
+      </div>`,
+    background: '#0d1218', color: '#e2e8f0',
+    confirmButtonText: 'Kaydet', confirmButtonColor: '#10b981',
+    showCancelButton: true, cancelButtonText: 'Vazgeç', cancelButtonColor: '#334155',
+    focusConfirm: false,
+    preConfirm: () => {
+      const category = document.getElementById('admin-poi-category').value;
+      const name = document.getElementById('admin-poi-name').value.trim();
+      const description = document.getElementById('admin-poi-desc').value.trim();
+      if (!name) { Swal.showValidationMessage('Ad alanı zorunludur.'); return false; }
+      return { category, name, description };
+    },
+  });
+
+  if (!formData) return;
+
+  const poi = {
+    id: `poi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    category: formData.category,
+    name: formData.name,
+    description: formData.description,
+    lat, lng,
+    createdAt: new Date().toISOString(),
+  };
+
+  await savePoiToGithub(poi);
+}
+
+/**
+ * Yeni POI'yi GitHub'daki pois.json dosyasına ekler.
+ * Akış: mevcut dosyayı (varsa) SHA'sıyla birlikte oku → diziye ekle → PUT ile commit et.
+ * GitHub Contents API SHA tabanlı bir "optimistic concurrency" kullanır: dosyayı
+ * güncellerken doğru SHA verilmezse (biri arada değiştirmişse) 409 döner; bu basit
+ * tek-yöneticili kullanım için yeterli, ekstra bir kilitleme mekanizması eklemedik.
+ */
+async function savePoiToGithub(poi) {
+  const loading = Swal.fire({
+    title: 'Kaydediliyor…', background: '#0d1218', color: '#e2e8f0',
+    didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false,
+  });
+
+  try {
+    const { owner, repo, token, branch } = adminSession;
+    const apiBase = `${ENDPOINTS.github}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${POI_FILE_PATH}`;
+    const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' };
+
+    // 1) Mevcut dosyayı oku (varsa SHA'sını almak için)
+    let existingPois = [];
+    let sha = null;
+    const getRes = await fetchWithTimeout(`${apiBase}?ref=${encodeURIComponent(branch)}`, { headers }, 10000);
+    if (getRes.status === 200) {
+      const fileData = await getRes.json();
+      sha = fileData.sha;
+      try {
+        const decoded = decodeURIComponent(escape(atob(fileData.content.replace(/\n/g, ''))));
+        const parsed = JSON.parse(decoded);
+        if (Array.isArray(parsed)) existingPois = parsed;
+      } catch (e) {
+        console.warn('pois.json ayrıştırılamadı, sıfırdan oluşturuluyor:', e.message);
+      }
+    } else if (getRes.status !== 404) {
+      throw new Error(`Dosya okunamadı (HTTP ${getRes.status})`);
+    }
+    // 404 ise dosya henüz yok — sha=null göndererek yeni dosya oluşturulacak
+
+    // 2) Yeni POI'yi ekle
+    const updatedPois = [...existingPois, poi];
+    const newContentB64 = btoa(unescape(encodeURIComponent(JSON.stringify(updatedPois, null, 2))));
+
+    // 3) PUT ile commit et
+    const putBody = {
+      message: `Yeni yer eklendi: ${poi.name} (${ADMIN_POI_CATEGORIES[poi.category]?.label || poi.category})`,
+      content: newContentB64,
+      branch,
+    };
+    if (sha) putBody.sha = sha;
+
+    const putRes = await fetchWithTimeout(apiBase, {
+      method: 'PUT',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify(putBody),
+    }, 15000);
+
+    if (!putRes.ok) {
+      const errBody = await putRes.json().catch(() => ({}));
+      throw new Error(errBody.message || `Kaydetme başarısız (HTTP ${putRes.status})`);
+    }
+
+    Swal.close();
+    state.adminPois = updatedPois;
+    renderAdminPois();
+    toast(`"${poi.name}" eklendi ve GitHub'a kaydedildi.`, 'success');
+  } catch (err) {
+    Swal.close();
+    Swal.fire({
+      title: 'Kaydedilemedi', text: err.message, icon: 'error',
+      background: '#0d1218', color: '#e2e8f0', confirmButtonColor: '#ef5a6f',
+    });
+  }
+}
+
+/**
+ * Herkese açık POI okuma: raw.githubusercontent.com üzerinden anahtarsız
+ * olarak pois.json okunur. Bu, admin token'ı GEREKTİRMEZ — repo/dosya public
+ * olduğu sürece herkes çalışır. Bu sayede admin girişi yapmamış sıradan bir
+ * ziyaretçi de yöneticinin eklediği yerleri haritada görebilir.
+ */
+async function loadPublicPois(owner, repo, branch) {
+  try {
+    const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${POI_FILE_PATH}`;
+    const res = await fetchWithTimeout(rawUrl, {}, 10000);
+    if (!res.ok) {
+      if (res.status !== 404) console.warn(`Herkese açık POI dosyası okunamadı: HTTP ${res.status}`);
+      return; // dosya henüz yoksa sessizce çık, hata gösterme
+    }
+    const pois = await res.json();
+    if (Array.isArray(pois)) {
+      state.adminPois = pois;
+      renderAdminPois();
+    }
+  } catch (err) {
+    console.warn('Herkese açık POI verisi alınamadı:', err.message);
+  }
+}
+
+/** state.adminPois içindeki tüm yerleri haritada işaretçi olarak çizer. */
+function renderAdminPois() {
+  if (!adminPoiLayerGroup) return;
+  adminPoiLayerGroup.clearLayers();
+
+  state.adminPois.forEach((poi) => {
+    const cat = ADMIN_POI_CATEGORIES[poi.category] || { label: poi.category, icon: 'fa-location-dot', color: '#94a3b8' };
+    const icon = L.divIcon({
+      className: 'admin-poi-marker',
+      html: `<div style="width:28px;height:28px;border-radius:50%;background:${cat.color};display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.4);border:2px solid rgba(255,255,255,.85)">
+               <i class="fa-solid ${cat.icon}" style="color:#0d1218;font-size:12px"></i>
+             </div>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    });
+    const marker = L.marker([poi.lat, poi.lng], { icon }).bindPopup(`
+      <div style="min-width:180px">
+        <div style="font-weight:700;font-size:13px;margin-bottom:2px">${escapeHtml(poi.name)}</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:4px">${escapeHtml(cat.label)}</div>
+        ${poi.description ? `<div style="font-size:12px">${escapeHtml(poi.description)}</div>` : ''}
+      </div>
+    `);
+    marker.addTo(adminPoiLayerGroup);
+  });
+}
+
 async function onMapClick(e) {
+  // Yönetici modu aktifse, tıklama normal durak eklemek yerine yeni bir
+  // POI (yer) ekleme formu açar; normal akışa hiç girmeden burada çıkılır.
+  if (adminModeActive) {
+    handleAdminMapClick(e.latlng.lat, e.latlng.lng);
+    return;
+  }
+
   // Mobilde parmakla art arda hızlı dokunulduğunda, önceki konum doğrulama
   // isteği bitmeden yenisinin başlamasını (üst üste toast/istek birikmesini)
   // önlemek için basit bir kilit kullanıyoruz.
