@@ -569,6 +569,7 @@ html[data-theme="light"] .swal2-popup .swal2-styled.swal2-confirm { color: #fff 
 
 /* ================= POPUP ZENGİNLEŞTİRME ================= */
 .rec-popup-wrap .leaflet-popup-content { width: auto !important; }
+.rec-popup-wrap.leaflet-popup .leaflet-popup-content { width: 254px !important; }
 .rec-popup-photo {
   margin: -12px -13px 10px; height: 118px; overflow: hidden;
   border-radius: 14px 14px 0 0; background: var(--c-inset);
@@ -2873,7 +2874,7 @@ function renderAdminPois() {
     });
     const marker = L.marker([poi.lat, poi.lng], { icon, zIndexOffset: near ? 500 : 0 });
     // Popup içeriği açılırken üretilir; böylece "rotada mı", "yönetici mi" gibi durumlar her zaman güncel olur
-    marker.bindPopup(() => buildRecPopupHtml(poi, cat), { closeButton: false, className: 'rec-popup-wrap', minWidth: 240, maxWidth: 300, autoPanPadding: [20, 70] });
+    marker.bindPopup(() => buildRecPopupHtml(poi, cat), { closeButton: false, className: 'rec-popup-wrap', minWidth: 254, maxWidth: 254, autoPanPadding: [20, 70] });
     marker.addTo(adminPoiLayerGroup);
   });
   updateRecFilterUI();
