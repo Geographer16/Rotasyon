@@ -2691,11 +2691,15 @@ function ghContentsUrl(path) {
  * bu yüzden 409 (biri arada değiştirdi) gelirse bir kez otomatik yeniden denenir.
  */
 async function mutatePoisOnGithub(mutator, commitMessage, attempt = 0) {
+  const MAX_ATTEMPTS = 4; // her denemede SHA'yı YENİDEN okuduğumuz için birkaç deneme güvenlidir
   const { branch } = adminSession;
   const apiUrl = ghContentsUrl(POI_FILE_PATH);
 
   let existing = [];
   let sha = null;
+  // ÖNEMLİ: SHA her zaman burada, PUT'tan hemen önce taze okunur. Böylece bir
+  // önceki (başarısız veya paralel) yazma pois.json'u değiştirmiş olsa bile,
+  // biz her denemede en güncel SHA ile PUT ederiz.
   const getRes = await fetchWithTimeout(`${apiUrl}?ref=${encodeURIComponent(branch)}`, { headers: ghHeaders() }, 10000);
   if (getRes.status === 200) {
     const fileData = await getRes.json();
@@ -2725,12 +2729,17 @@ async function mutatePoisOnGithub(mutator, commitMessage, attempt = 0) {
     body: JSON.stringify(putBody),
   }, 15000);
 
-  if (putRes.status === 409 && attempt < 1) {
+  // GitHub, SHA uyuşmazlığını duruma göre 409 (Conflict) veya 422 (Unprocessable
+  // Entity, mesajı "...does not match..." şeklinde) olarak döndürebilir. İkisi de
+  // aynı nedenden kaynaklanır: elimizdeki SHA artık eski. Taze SHA ile yeniden dene.
+  if ((putRes.status === 409 || putRes.status === 422) && attempt < MAX_ATTEMPTS - 1) {
+    await new Promise((r) => setTimeout(r, 300 * (attempt + 1))); // artan kısa bekleme
     return mutatePoisOnGithub(mutator, commitMessage, attempt + 1);
   }
   if (!putRes.ok) {
     const errBody = await putRes.json().catch(() => ({}));
-    throw new Error(errBody.message || `Kaydetme başarısız (HTTP ${putRes.status})`);
+    const detail = errBody.message || `HTTP ${putRes.status}`;
+    throw new Error(`Kaydetme başarısız (${detail}). Lütfen sayfayı yenileyip tekrar deneyin.`);
   }
   return updated;
 }
