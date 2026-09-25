@@ -7,5 +7,17 @@
     "lat": 41.00802952906538,
     "lng": 39.72135066987988,
     "createdAt": "2026-09-24T19:54:29.765Z"
+  },
+  {
+    "id": "poi_1790328785873_aahlsm",
+    "lat": 41.02577032217661,
+    "lng": 40.518152117729194,
+    "category": "restaurant",
+    "name": "Liman Lokantası",
+    "description": "Bölgeye ait lezzetleri gayet güzel bir reçete ile sunan güzide lokanta. Reçetelerinde eski usül pişirme tekniklerine yer veren ve bu sayede pek çok ürününü zirveye taşıyan bu mekana kesinlikle uğranılması gerekmektedir.",
+    "phone": null,
+    "link": null,
+    "createdAt": "2026-09-25T09:33:05.873Z",
+    "photo": "poi-photos/poi_1790328785873_aahlsm_1790328786203.jpg"
   }
 ]
