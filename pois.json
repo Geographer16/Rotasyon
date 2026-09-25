@@ -19,7 +19,10 @@
     "link": null,
     "createdAt": "2026-09-25T09:33:05.873Z",
     "photo": null,
-    "photos": [],
-    "updatedAt": "2026-09-25T09:56:20.242Z"
+    "photos": [
+      "poi-photos/poi_1790328785873_aahlsm_1790330483306_0.jpg",
+      "poi-photos/poi_1790328785873_aahlsm_1790330492653_1.jpg"
+    ],
+    "updatedAt": "2026-09-25T10:01:44.951Z"
   }
 ]
