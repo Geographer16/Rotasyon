@@ -2905,11 +2905,22 @@ async function deletePoiOnGithub(id) {
  * olarak pois.json okunur. Bu, admin token'ı GEREKTİRMEZ — repo/dosya public
  * olduğu sürece herkes çalışır. Bu sayede admin girişi yapmamış sıradan bir
  * ziyaretçi de yöneticinin eklediği yerleri haritada görebilir.
+ *
+ * ÖNEMLİ — ÖNBELLEK: raw.githubusercontent.com yanıtları CDN üzerinde
+ * `Cache-Control: max-age=300` (5 dakika) ile önbelleğe alınır ve tarayıcı da
+ * bunu kendi HTTP cache'inde saklayabilir. Bu yüzden bir yönetici yeni bir yer/
+ * fotoğraf ekledikten sonra sıradan ziyaretçiler birkaç dakika boyunca ESKİ
+ * veriyi görebiliyordu (yeni eklenen fotoğraflar "hiç yokmuş" gibi görünüyordu).
+ * Bunu önlemek için: (1) fetch isteğine `cache: 'no-store'` ile tarayıcı
+ * önbelleği devre dışı bırakılır, (2) URL'ye bir zaman damgası eklenerek
+ * GitHub'ın CDN önbelleğindeki eski kopya değil, her seferinde taze bir kopya
+ * istenir (farklı sorgu dizesi = farklı önbellek anahtarı).
  */
 async function loadPublicPois(owner, repo, branch) {
   try {
-    const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${POI_FILE_PATH}`;
-    const res = await fetchWithTimeout(rawUrl, {}, 10000);
+    const cacheBuster = Date.now();
+    const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${POI_FILE_PATH}?t=${cacheBuster}`;
+    const res = await fetchWithTimeout(rawUrl, { cache: 'no-store' }, 10000);
     if (!res.ok) {
       if (res.status !== 404) console.warn(`Herkese açık POI dosyası okunamadı: HTTP ${res.status}`);
       return; // dosya henüz yoksa sessizce çık, hata gösterme
@@ -2918,6 +2929,7 @@ async function loadPublicPois(owner, repo, branch) {
     if (Array.isArray(pois)) {
       state.adminPois = pois;
       refreshRecRouteMatches();
+      renderAdminPois();
     }
   } catch (err) {
     console.warn('Herkese açık POI verisi alınamadı:', err.message);
