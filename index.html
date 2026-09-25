@@ -102,6 +102,11 @@
   --c-legpill-bg: rgba(6, 9, 13, 0.96);
   --c-shadow: rgba(0, 0, 0, 0.35);
   --c-scroll: rgba(148,176,199,0.2);
+
+  /* Tavsiye fotoğrafları galerisinde resimlerin nasıl sığdırılacağı: 'cover' (kırpılmış, çerçeveyi
+     doldurur) ya da 'contain' (kırpılmadan tamamı görünür, boşluk kalabilir). Yönetici panelinden
+     değiştirilebilir ve tüm ziyaretçiler için ortak bir ayar dosyasından (site-settings.json) okunur. */
+  --rec-photo-fit: cover;
 }
 
 /* =================== AÇIK TEMA ===================
@@ -582,7 +587,7 @@ html[data-theme="light"] .swal2-popup .swal2-styled.swal2-confirm { color: #fff 
 }
 .rec-popup-gallery-track { display: flex; height: 100%; transition: transform .25s ease; }
 .rec-popup-gallery-slide { width: 100%; height: 100%; flex-shrink: 0; }
-.rec-popup-gallery-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rec-popup-gallery-slide img { width: 100%; height: 100%; object-fit: var(--rec-photo-fit, cover); display: block; background: var(--c-panel); }
 .rec-gallery-nav {
   position: absolute; top: 50%; transform: translateY(-50%);
   width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer;
@@ -2299,6 +2304,9 @@ let isProcessingMapClick = false;
 const ADMIN_AUTH_STORAGE_KEY = 'rotalis_admin_github_auth_v1';
 const ADMIN_PUBLIC_REPO_STORAGE_KEY = 'rotalis_public_repo_v1'; // herkese açık okuma için repo bilgisi (token içermez)
 const POI_FILE_PATH = 'pois.json';
+const SITE_SETTINGS_FILE_PATH = 'site-settings.json'; // tüm ziyaretçiler için ortak görünüm ayarları (repoda ayrı dosya)
+const DEFAULT_SITE_SETTINGS = { photoFit: 'cover' }; // 'cover' = kırpılmış/çerçeveyi doldur, 'contain' = tamamı görünsün
+let siteSettings = { ...DEFAULT_SITE_SETTINGS };
 
 // Tüm admin POI'leri artık tek bir başlık altında toplanıyor: "Topsakal'dan Tavsiyeler".
 // Alt tipler (fuel/restaurant/hotel) yalnızca ikon/renk seçimi için tutuluyor;
@@ -2347,7 +2355,9 @@ function initAdminSystem() {
   const pubInfo = readPublicRepoInfo();
   if (pubInfo && pubInfo.owner && pubInfo.repo) {
     loadPublicPois(pubInfo.owner, pubInfo.repo, pubInfo.branch || 'main');
+    loadPublicSiteSettings(pubInfo.owner, pubInfo.repo, pubInfo.branch || 'main');
   }
+  applySiteSettings(); // sunucudan cevap gelene kadar varsayılan değerle başla
 }
 
 /** Logoya tıklanınca: admin modu zaten aktifse paneli/çıkışı göster, değilse giriş formu aç. */
@@ -2358,9 +2368,17 @@ function openAdminLoginOrPanel() {
       html: `<div style="text-align:left;font-size:13px;line-height:1.6">
                <b>${escapeHtml(adminSession.owner)}/${escapeHtml(adminSession.repo)}</b> reposuna bağlısınız.<br>
                Haritaya tıklayarak yeni bir tavsiye ekleyebilirsiniz. Mevcut bir tavsiyeye tıklayıp düzenleyebilir veya silebilirsiniz.
+               <button type="button" id="admin-open-photo-settings" style="margin-top:12px;width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--c-border-strong);background:var(--c-inset);color:var(--c-text-2);font-size:12.5px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px">
+                 <i class="fa-solid fa-image" style="color:var(--c-accent-text)"></i> Fotoğraf Görünümü Ayarları
+               </button>
              </div>`,
       icon: 'info',
-      
+      didOpen: () => {
+        document.getElementById('admin-open-photo-settings')?.addEventListener('click', () => {
+          Swal.close();
+          openPhotoDisplaySettings();
+        });
+      },
       showCancelButton: true,
       confirmButtonText: 'Haritada Yer Ekle',
       cancelButtonText: 'Çıkış Yap',
@@ -2637,7 +2655,16 @@ async function showPoiForm({ mode, poi = null }) {
   return value || null;
 }
 
-/** Düzenleme akışı: formu aç, fotoğraf değişikliklerini işle, kaydet. */
+/** Düzenleme akışı: formu aç, fotoğraf değişikliklerini işle, kaydet.
+ *
+ * Sıra ÖNEMLİDİR (yarış durumlarını ve tutarsız kayıtları önlemek için):
+ *   1) Yeni seçilen fotoğrafları yükle (repoya yeni dosyalar eklenir).
+ *   2) pois.json'u YENİ fotoğraf listesiyle güncelle — bu adım bitmeden
+ *      eski fotoğraflar silinmez, böylece bir hata olursa kayıt hâlâ
+ *      eskisi ya da yenisi ile tutarlı kalır, "yarım" bir durumda kalmaz.
+ *   3) pois.json güvenle güncellendikten SONRA, kaldırılan eski fotoğraflar
+ *      repodan silinir. Silinemeyenler kullanıcıya açıkça bildirilir.
+ */
 async function editPoi(id) {
   const poi = state.adminPois.find((p) => p.id === id);
   if (!poi) return;
@@ -2654,19 +2681,48 @@ async function editPoi(id) {
   const kept = existing.filter((ph) => !f.removePaths.includes(ph));
   const removed = existing.filter((ph) => f.removePaths.includes(ph));
 
+  // 1) Yeni fotoğrafları yükle (varsa)
   let newlyUploaded = [];
   if (f.photoFiles && f.photoFiles.length) {
     Swal.fire({ title: 'Fotoğraflar yükleniyor…', didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false });
-    try { newlyUploaded = await uploadPoiPhotos(f.photoFiles, id); }
-    catch (err) {
+    try {
+      newlyUploaded = await uploadPoiPhotos(f.photoFiles, id);
+    } catch (err) {
       Swal.close();
-      toast(`Fotoğraflar yüklenemedi: ${err.message}`, 'error');
+      toast(`Fotoğraflar yüklenemedi: ${err.message} Değişiklikler kaydedilmedi.`, 'error');
+      return; // yükleme başarısızsa hiçbir şeyi kaydetme, kullanıcı tekrar denesin
     }
   }
+
+  // 2) pois.json'u güncelle
   changes.photos = [...kept, ...newlyUploaded];
   if (poi.photo) changes.photo = null; // eski tekil-fotoğraf alanı varsa temizle, artık photos kullanılıyor
-  removed.forEach((ph) => deletePoiPhoto(ph)); // arka planda, kaydı bekletmeden temizle
-  await updatePoiOnGithub(id, changes);
+  Swal.fire({ title: 'Kaydediliyor…', didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false });
+  let updated;
+  try {
+    updated = await mutatePoisOnGithub(
+      (list) => list.map((p) => (p.id === id ? { ...p, ...changes, updatedAt: new Date().toISOString() } : p)),
+      `Yer güncellendi: ${changes.name || id}`
+    );
+  } catch (err) {
+    Swal.close();
+    Swal.fire({ title: 'Güncellenemedi', text: err.message, icon: 'error', confirmButtonColor: '#ef4444' });
+    return; // pois.json güncellenemedi, eski fotoğrafları SİLME — hâlâ kullanımda olabilirler
+  }
+  Swal.close();
+  state.adminPois = updated;
+  refreshRecRouteMatches();
+  renderAdminPois();
+
+  // 3) pois.json güvenle güncellendi — şimdi artık kullanılmayan eski fotoğrafları sil
+  if (removed.length) {
+    const { failed } = await deletePoiPhotos(removed);
+    if (failed.length) {
+      toast(`Değişiklikler kaydedildi, ancak ${failed.length} eski fotoğraf depodan silinemedi. Tekrar deneyin.`, 'error');
+      return;
+    }
+  }
+  toast('Değişiklikler kaydedildi.', 'success');
 }
 
 window.__editPoi = (id) => editPoi(id);
@@ -2821,20 +2877,44 @@ function readPublicRepoInfo() {
   try { return JSON.parse(localStorage.getItem(ADMIN_PUBLIC_REPO_STORAGE_KEY)); } catch (e) { return null; }
 }
 
-/** Fotoğraf silme (en iyi çaba — hata olursa kayıt silme işlemini engellemez). */
+/** Fotoğraf silme. Gerçekten silinip silinmediğini (true/false) döndürür — artık sessizce yutulmuyor. */
 async function deletePoiPhoto(path) {
-  if (!path) return;
+  if (!path) return true;
   try {
     const url = `${ghContentsUrl(path)}?ref=${encodeURIComponent(adminSession.branch)}`;
     const g = await fetchWithTimeout(url, { headers: ghHeaders() }, 10000);
-    if (!g.ok) return;
+    if (!g.ok) {
+      if (g.status === 404) return true; // zaten yok, silinmiş sayılır
+      console.warn(`Fotoğraf silinemedi (dosya okunamadı, HTTP ${g.status}): ${path}`);
+      return false;
+    }
     const { sha } = await g.json();
-    await fetchWithTimeout(ghContentsUrl(path), {
+    const del = await fetchWithTimeout(ghContentsUrl(path), {
       method: 'DELETE',
       headers: { ...ghHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: 'Fotoğraf silindi', sha, branch: adminSession.branch }),
     }, 12000);
-  } catch (e) { console.warn('Fotoğraf silinemedi:', e.message); }
+    if (!del.ok) {
+      console.warn(`Fotoğraf silinemedi (HTTP ${del.status}): ${path}`);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Fotoğraf silinemedi:', e.message);
+    return false;
+  }
+}
+
+/** Birden fazla fotoğrafı sırayla siler (GitHub Contents API eşzamanlı yazmalarda çakışabildiği
+ * için sırayla ilerlenir). Başarıyla silinen ve silinemeyen yolları ayrı ayrı döndürür. */
+async function deletePoiPhotos(paths) {
+  const deleted = [];
+  const failed = [];
+  for (const p of paths) {
+    const ok = await deletePoiPhoto(p);
+    (ok ? deleted : failed).push(p);
+  }
+  return { deleted, failed };
 }
 
 /** Yeni POI ekle. */
@@ -2848,6 +2928,7 @@ async function savePoiToGithub(poi) {
     Swal.close();
     state.adminPois = updated;
     refreshRecRouteMatches();
+    renderAdminPois();
     toast(`"${poi.name}" eklendi ve GitHub'a kaydedildi.`, 'success');
   } catch (err) {
     Swal.close();
@@ -2873,7 +2954,7 @@ async function updatePoiOnGithub(id, changes) {
   }
 }
 
-/** POI'yi sil (onay ister; fotoğrafı da repodan temizler). */
+/** POI'yi sil (onay ister; tüm fotoğraflarını da repodan temizler). */
 async function deletePoiOnGithub(id) {
   const poi = state.adminPois.find((p) => p.id === id);
   if (!poi) return;
@@ -2889,10 +2970,21 @@ async function deletePoiOnGithub(id) {
   Swal.fire({ title: 'Siliniyor…', didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false });
   try {
     const updated = await mutatePoisOnGithub((list) => list.filter((p) => p.id !== id), `Yer silindi: ${poi.name}`);
-    await deletePoiPhoto(poi.photo);
     Swal.close();
     state.adminPois = updated;
     refreshRecRouteMatches();
+    renderAdminPois();
+
+    // pois.json'dan başarıyla kaldırıldıktan SONRA, mekana ait tüm fotoğrafları
+    // (hem eski tekil `photo` hem yeni `photos` dizisi) repodan sil.
+    const allPhotos = [...(poi.photos || []), ...(poi.photo ? [poi.photo] : [])];
+    if (allPhotos.length) {
+      const { failed } = await deletePoiPhotos(allPhotos);
+      if (failed.length) {
+        toast(`"${poi.name}" silindi, ancak ${failed.length} fotoğraf depodan temizlenemedi.`, 'error');
+        return;
+      }
+    }
     toast(`"${poi.name}" silindi.`, 'success');
   } catch (err) {
     Swal.close();
@@ -2935,6 +3027,130 @@ async function loadPublicPois(owner, repo, branch) {
     console.warn('Herkese açık POI verisi alınamadı:', err.message);
   }
 }
+
+/** CSS değişkenini güncel siteSettings'e göre uygular (tüm popup'lardaki fotoğrafları etkiler). */
+function applySiteSettings() {
+  document.documentElement.style.setProperty('--rec-photo-fit', siteSettings.photoFit === 'contain' ? 'contain' : 'cover');
+}
+
+/**
+ * Herkese açık, ortak görünüm ayarlarını (site-settings.json) okur — pois.json ile aynı
+ * mantık: token gerektirmez, repo public olduğu sürece herkeste aynı sonucu verir.
+ * Böylece yönetici fotoğraf görünümünü değiştirdiğinde TÜM ziyaretçilerde aynı şekilde
+ * uygulanır; yalnızca yöneticinin kendi tarayıcısına özel bir tercih olarak kalmaz.
+ */
+async function loadPublicSiteSettings(owner, repo, branch) {
+  try {
+    const cacheBuster = Date.now();
+    const rawUrl = `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${SITE_SETTINGS_FILE_PATH}?t=${cacheBuster}`;
+    const res = await fetchWithTimeout(rawUrl, { cache: 'no-store' }, 10000);
+    if (!res.ok) {
+      if (res.status !== 404) console.warn(`Görünüm ayarları okunamadı: HTTP ${res.status}`);
+      return; // dosya henüz oluşturulmamışsa varsayılanlarla devam edilir
+    }
+    const data = await res.json();
+    if (data && typeof data === 'object') {
+      siteSettings = { ...DEFAULT_SITE_SETTINGS, ...data };
+      applySiteSettings();
+    }
+  } catch (err) {
+    console.warn('Görünüm ayarları alınamadı:', err.message);
+  }
+}
+
+/**
+ * Yönetici, görünüm ayarını (ör. fotoğraf sığdırma modu) değiştirdiğinde bu fonksiyon
+ * site-settings.json dosyasını repoda oluşturur/günceller. pois.json'daki SHA tabanlı
+ * oku-değiştir-yaz mantığının aynısı burada da uygulanır (çakışma olursa güncel SHA ile
+ * yeniden dener), böylece başka bir değişiklikle çakışıp veri kaybı yaşanmaz.
+ */
+async function saveSiteSettingsToGithub(newSettings, attempt = 0) {
+  const MAX_ATTEMPTS = 4;
+  const { branch } = adminSession;
+  const apiUrl = ghContentsUrl(SITE_SETTINGS_FILE_PATH);
+
+  let sha = null;
+  const getRes = await fetchWithTimeout(`${apiUrl}?ref=${encodeURIComponent(branch)}`, { headers: ghHeaders() }, 10000);
+  if (getRes.status === 200) {
+    const fileData = await getRes.json();
+    sha = fileData.sha;
+  } else if (getRes.status !== 404) {
+    throw new Error(`Ayar dosyası okunamadı (HTTP ${getRes.status})`);
+  }
+
+  const merged = { ...DEFAULT_SITE_SETTINGS, ...newSettings };
+  const putBody = {
+    message: 'Görünüm ayarları güncellendi',
+    content: btoa(unescape(encodeURIComponent(JSON.stringify(merged, null, 2)))),
+    branch,
+  };
+  if (sha) putBody.sha = sha;
+
+  const putRes = await fetchWithTimeout(apiUrl, {
+    method: 'PUT',
+    headers: { ...ghHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(putBody),
+  }, 15000);
+
+  if ((putRes.status === 409 || putRes.status === 422) && attempt < MAX_ATTEMPTS - 1) {
+    await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+    return saveSiteSettingsToGithub(newSettings, attempt + 1);
+  }
+  if (!putRes.ok) {
+    const errBody = await putRes.json().catch(() => ({}));
+    throw new Error(errBody.message || `Kaydetme başarısız (HTTP ${putRes.status})`);
+  }
+  siteSettings = merged;
+  applySiteSettings();
+  return merged;
+}
+
+/** Yönetici panelinde "Fotoğraf Görünümü" seçim ekranını açar. */
+async function openPhotoDisplaySettings() {
+  const { value } = await Swal.fire({
+    title: 'Fotoğraf Görünümü',
+    html: `
+      <div style="text-align:left;font-size:12.5px;line-height:1.5">
+        <p style="color:var(--c-text-muted);margin:0 0 10px">
+          Kullanıcıların gördüğü tavsiye kartlarında fotoğrafların nasıl sığdırılacağını seçin.
+          Bu ayar tüm ziyaretçiler için geçerli olur.
+        </p>
+        <label style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px;cursor:pointer">
+          <input type="radio" name="photo-fit" value="cover" ${siteSettings.photoFit !== 'contain' ? 'checked' : ''} style="margin-top:3px">
+          <span><b>Kırpılmış (çerçeveyi doldur)</b><br>
+            <span style="color:var(--c-text-dim);font-size:11px">Fotoğraf, kare çerçeveyi tam doldurur; kenarlardan biraz kırpılabilir. Daha düzenli görünür.</span>
+          </span>
+        </label>
+        <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
+          <input type="radio" name="photo-fit" value="contain" ${siteSettings.photoFit === 'contain' ? 'checked' : ''} style="margin-top:3px">
+          <span><b>Tam sığdır (kırpmadan)</b><br>
+            <span style="color:var(--c-text-dim);font-size:11px">Fotoğrafın tamamı görünür, hiçbir kısmı kırpılmaz; üstte/altta boşluk kalabilir.</span>
+          </span>
+        </label>
+      </div>`,
+    confirmButtonText: 'Kaydet', confirmButtonColor: '#10b981',
+    showCancelButton: true, cancelButtonText: 'Vazgeç', cancelButtonColor: '#334155',
+    showCloseButton: true, closeButtonHtml: '&times;',
+    focusConfirm: false,
+    preConfirm: () => {
+      const el = document.querySelector('input[name="photo-fit"]:checked');
+      return el ? el.value : 'cover';
+    },
+  });
+  if (!value) return;
+  if (value === siteSettings.photoFit) return; // değişiklik yok
+
+  Swal.fire({ title: 'Kaydediliyor…', didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false });
+  try {
+    await saveSiteSettingsToGithub({ photoFit: value });
+    Swal.close();
+    toast('Fotoğraf görünümü güncellendi.', 'success');
+  } catch (err) {
+    Swal.close();
+    Swal.fire({ title: 'Kaydedilemedi', text: err.message, icon: 'error', confirmButtonColor: '#ef4444' });
+  }
+}
+
 
 /**
  * state.adminPois içindeki tüm yerleri haritada işaretçi olarak çizer.
