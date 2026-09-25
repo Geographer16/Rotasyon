@@ -2706,6 +2706,12 @@ async function editPoi(id) {
     );
   } catch (err) {
     Swal.close();
+    // ÖNEMLİ — YETİM DOSYA ÖNLEME: pois.json güncellenemedi ama adım 1'de yeni
+    // fotoğraflar zaten repoya yüklenmiş olabilir. Onları hemen geri sil; aksi
+    // halde her başarısız deneme repoda kullanılmayan bir dosya bırakır.
+    if (newlyUploaded.length) {
+      await deletePoiPhotos(newlyUploaded).catch(() => {});
+    }
     Swal.fire({ title: 'Güncellenemedi', text: err.message, icon: 'error', confirmButtonColor: '#ef4444' });
     return; // pois.json güncellenemedi, eski fotoğrafları SİLME — hâlâ kullanımda olabilirler
   }
@@ -2756,7 +2762,7 @@ async function mutatePoisOnGithub(mutator, commitMessage, attempt = 0) {
   // ÖNEMLİ: SHA her zaman burada, PUT'tan hemen önce taze okunur. Böylece bir
   // önceki (başarısız veya paralel) yazma pois.json'u değiştirmiş olsa bile,
   // biz her denemede en güncel SHA ile PUT ederiz.
-  const getRes = await fetchWithTimeout(`${apiUrl}?ref=${encodeURIComponent(branch)}`, { headers: ghHeaders() }, 10000);
+  const getRes = await fetchWithTimeout(`${apiUrl}?ref=${encodeURIComponent(branch)}`, { headers: ghHeaders(), cache: 'no-store' }, 10000);
   if (getRes.status === 200) {
     const fileData = await getRes.json();
     sha = fileData.sha;
@@ -2882,7 +2888,7 @@ async function deletePoiPhoto(path) {
   if (!path) return true;
   try {
     const url = `${ghContentsUrl(path)}?ref=${encodeURIComponent(adminSession.branch)}`;
-    const g = await fetchWithTimeout(url, { headers: ghHeaders() }, 10000);
+    const g = await fetchWithTimeout(url, { headers: ghHeaders(), cache: 'no-store' }, 10000);
     if (!g.ok) {
       if (g.status === 404) return true; // zaten yok, silinmiş sayılır
       console.warn(`Fotoğraf silinemedi (dosya okunamadı, HTTP ${g.status}): ${path}`);
@@ -2932,6 +2938,10 @@ async function savePoiToGithub(poi) {
     toast(`"${poi.name}" eklendi ve GitHub'a kaydedildi.`, 'success');
   } catch (err) {
     Swal.close();
+    // YETİM DOSYA ÖNLEME: kayıt başarısız olduysa ama fotoğraflar zaten yüklendiyse, geri sil.
+    if (poi.photos && poi.photos.length) {
+      await deletePoiPhotos(poi.photos).catch(() => {});
+    }
     Swal.fire({ title: 'Kaydedilemedi', text: err.message, icon: 'error', confirmButtonColor: '#ef4444' });
   }
 }
@@ -3070,7 +3080,7 @@ async function saveSiteSettingsToGithub(newSettings, attempt = 0) {
   const apiUrl = ghContentsUrl(SITE_SETTINGS_FILE_PATH);
 
   let sha = null;
-  const getRes = await fetchWithTimeout(`${apiUrl}?ref=${encodeURIComponent(branch)}`, { headers: ghHeaders() }, 10000);
+  const getRes = await fetchWithTimeout(`${apiUrl}?ref=${encodeURIComponent(branch)}`, { headers: ghHeaders(), cache: 'no-store' }, 10000);
   if (getRes.status === 200) {
     const fileData = await getRes.json();
     sha = fileData.sha;
