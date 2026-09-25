@@ -2754,7 +2754,16 @@ function compressImageToBase64(file, maxSide = 1200, quality = 0.82) {
   });
 }
 
-/** Sıkıştırılmış fotoğrafı repoya ayrı dosya olarak yükler, göreli yolunu döndürür. */
+/**
+ * Sıkıştırılmış fotoğrafı repoya ayrı dosya olarak yükler, göreli yolunu döndürür.
+ *
+ * ÖNEMLİ: Döndürülen yol, GitHub'ın PUT cevabında bildirdiği `content.path` alanından
+ * alınır — yerel olarak üretilen `path` değişkeninden DEĞİL. Böylece pois.json'a
+ * yazılan yol ile depoda gerçekten oluşan dosya adı arasında asla sapma olmaz.
+ * (Daha önce ikisi ayrı ayrı üretildiği için, örn. bir yeniden deneme veya çakışma
+ * durumunda dosya adı ile kayıtlı yol birbirini tutmayabiliyor, bu da herkese açık
+ * tarafta fotoğrafların 404 vermesine yol açıyordu.)
+ */
 async function uploadPoiPhoto(file, poiId, index = 0) {
   const b64 = await compressImageToBase64(file);
   const path = `${POI_PHOTO_DIR}/${poiId}_${Date.now()}_${index}.jpg`;
@@ -2767,7 +2776,13 @@ async function uploadPoiPhoto(file, poiId, index = 0) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message || `Fotoğraf yüklenemedi (HTTP ${res.status})`);
   }
-  return path;
+  const body = await res.json().catch(() => ({}));
+  const savedPath = body?.content?.path;
+  if (!savedPath) {
+    // Beklenmeyen bir cevap şekli — güvenli tarafta kalmak için doğrulama yap.
+    throw new Error('Fotoğraf yüklendi ama sunucudan yol bilgisi alınamadı, lütfen tekrar deneyin.');
+  }
+  return savedPath;
 }
 
 /**
