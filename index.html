@@ -549,6 +549,11 @@ html[data-theme="light"] .swal2-popup .swal2-styled.swal2-confirm { color: #fff 
   animation: rec-fade-in .2s ease;
 }
 .rec-filter-bar.hidden { display: none; }
+/* Mobilde kategori çipleri yer kaplamasın: "Tavsiyeler" düğmesi sade aç/kapat
+   olarak kalır, filtreleme yalnızca masaüstünde (>=1024px) gösterilir. */
+@media (max-width: 1023px) {
+  .rec-filter-bar { display: none !important; }
+}
 @keyframes rec-fade-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 .rec-chip {
   display: flex; align-items: center; gap: 8px;
@@ -570,11 +575,30 @@ html[data-theme="light"] .swal2-popup .swal2-styled.swal2-confirm { color: #fff 
 /* ================= POPUP ZENGİNLEŞTİRME ================= */
 .rec-popup-wrap .leaflet-popup-content { width: auto !important; }
 .rec-popup-wrap.leaflet-popup .leaflet-popup-content { width: 254px !important; }
-.rec-popup-photo {
-  margin: -12px -13px 10px; height: 118px; overflow: hidden;
-  border-radius: 14px 14px 0 0; background: var(--c-inset);
+/* ---- Fotoğraf galerisi (popup içi, kaydırılabilir) ---- */
+.rec-popup-gallery {
+  position: relative; margin: -12px -13px 10px; height: 130px;
+  overflow: hidden; border-radius: 14px 14px 0 0; background: var(--c-inset);
 }
-.rec-popup-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rec-popup-gallery-track { display: flex; height: 100%; transition: transform .25s ease; }
+.rec-popup-gallery-slide { width: 100%; height: 100%; flex-shrink: 0; }
+.rec-popup-gallery-slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rec-gallery-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px; border-radius: 50%; border: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 11px;
+  background: rgba(0,0,0,.42); color: #fff; backdrop-filter: blur(2px);
+  transition: background .15s ease;
+}
+.rec-gallery-nav:hover { background: rgba(0,0,0,.6); }
+.rec-gallery-prev { left: 6px; }
+.rec-gallery-next { right: 6px; }
+.rec-gallery-dots {
+  position: absolute; bottom: 7px; left: 0; right: 0;
+  display: flex; justify-content: center; gap: 4px;
+}
+.rec-gallery-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,.5); transition: background .15s ease, transform .15s ease; }
+.rec-gallery-dot.is-active { background: #fff; transform: scale(1.3); }
 .rec-near-badge {
   display: inline-flex; align-items: center; gap: 4px; margin-left: 6px;
   padding: 1px 7px; border-radius: 999px; font-size: 9.5px; letter-spacing: .02em;
@@ -1467,6 +1491,24 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 /* ============================================================
    1. SABİTLER & UÇ NOKTALAR
    ============================================================ */
+/**
+ * "Topsakal'dan Tavsiyeler" verisinin YAYINLANDIĞI, herkese açık (public) GitHub
+ * deposu. Bu değer sabittir ve HERKESİN tarayıcısında aynıdır — bu yüzden bir
+ * yönetici bir yer eklediğinde, siteyi açan HERKES (giriş yapmasa bile) onu
+ * görür. Daha önceki sürümde bu bilgi yalnızca yöneticinin kendi tarayıcısına
+ * (localStorage) yazılıyordu; bu da eklenen yerlerin sadece o tarayıcıda
+ * görünmesine yol açıyordu. Artık tek doğru kaynak burasıdır.
+ *
+ * Boş bırakılırsa (owner veya repo yoksa) site, yöneticinin GİRİŞ YAPTIĞI
+ * depoyu bu alana otomatik yazmayı önerir (bkz. attemptAdminLogin) — ama asıl
+ * kalıcı çözüm, doğru değerleri burada elle ayarlamaktır.
+ */
+const PUBLISHED_POI_REPO = {
+  owner: '',   // ör. 'topsakal'
+  repo: '',    // ör. 'rota'
+  branch: 'main',
+};
+
 const ENDPOINTS = {
   photon: 'https://photon.komoot.io/api/',
   nominatimSearch: 'https://nominatim.openstreetmap.org/search',
@@ -2298,16 +2340,14 @@ function initAdminSystem() {
     }
   } catch (e) { /* bozuk veri varsa yok say */ }
 
-  // Herkese açık POI okuma: yönetici hiç giriş yapmamış bir ziyaretçide bile
-  // daha önce PAYLAŞILAN bir repo/dosya varsa (bkz. not) POI'ler gösterilsin.
-  // Bu depolama yalnızca "owner/repo/branch" bilgisini tutar, TOKEN TUTMAZ.
-  try {
-    const pub = localStorage.getItem(ADMIN_PUBLIC_REPO_STORAGE_KEY);
-    if (pub) {
-      const { owner, repo, branch } = JSON.parse(pub);
-      if (owner && repo) loadPublicPois(owner, repo, branch || 'main');
-    }
-  } catch (e) { /* yok say */ }
+  // Herkese açık POI okuma: SİTEYİ AÇAN HERKES (giriş yapmasa bile) tavsiyeleri
+  // görsün diye, önce koddaki sabit PUBLISHED_POI_REPO denenir — bu değer tüm
+  // ziyaretçilerde aynıdır. Yalnızca o boşsa (henüz ayarlanmamışsa), eski
+  // sürümden kalma ve SADECE BU TARAYICIYA özel localStorage kaydına bakılır.
+  const pubInfo = readPublicRepoInfo();
+  if (pubInfo && pubInfo.owner && pubInfo.repo) {
+    loadPublicPois(pubInfo.owner, pubInfo.repo, pubInfo.branch || 'main');
+  }
 }
 
 /** Logoya tıklanınca: admin modu zaten aktifse paneli/çıkışı göster, değilse giriş formu aç. */
@@ -2418,10 +2458,31 @@ async function attemptAdminLogin(owner, repo, token, remember) {
       try { localStorage.setItem(ADMIN_AUTH_STORAGE_KEY, JSON.stringify(adminSession)); }
       catch (e) { /* localStorage dolu/kapalı olabilir, sessizce geç */ }
     }
-    // Herkese açık okuma için repo bilgisini (token OLMADAN) ayrıca sakla —
-    // böylece bu tarayıcıda başka biri de (giriş yapmadan) POI'leri görebilir.
+    // ÖNEMLİ: Koddaki sabit PUBLISHED_POI_REPO ayarlanmamışsa, tavsiyeler
+    // yalnızca BU tarayıcıda (localStorage) görünür — başka hiçbir ziyaretçi
+    // (ve hatta bu bilgisayarda farklı bir tarayıcı) onları göremez.
+    // Bunu localStorage'a da yazıyoruz ki en azından bu tarayıcıda hemen
+    // görünsün, ama KALICI ve HERKESE AÇIK çözüm için PUBLISHED_POI_REPO
+    // sabitini index.html içinde owner/repo ile doldurup siteyi öyle
+    // yayınlaman gerekir.
     try { localStorage.setItem(ADMIN_PUBLIC_REPO_STORAGE_KEY, JSON.stringify({ owner, repo, branch })); }
     catch (e) { /* geç */ }
+
+    if (!PUBLISHED_POI_REPO.owner || !PUBLISHED_POI_REPO.repo) {
+      setTimeout(() => {
+        Swal.fire({
+          title: 'Tek Tarayıcı Uyarısı',
+          html: `Eklediğin yerler <b>${escapeHtml(owner)}/${escapeHtml(repo)}</b> reposuna kaydediliyor, bu doğru.<br><br>
+                 Ancak sitenin kodundaki <code>PUBLISHED_POI_REPO</code> alanı henüz boş olduğu için,
+                 bu yerler şu an sadece <b>bu tarayıcıda</b> görünüyor — başka kullanıcılar göremiyor.<br><br>
+                 Kalıcı çözüm: index.html dosyasında <code>PUBLISHED_POI_REPO</code> sabitine
+                 <b>owner: '${escapeHtml(owner)}', repo: '${escapeHtml(repo)}'</b> yazıp siteyi yeniden yayınlamak.`,
+          icon: 'warning',
+          confirmButtonText: 'Anladım',
+          confirmButtonColor: '#f59e0b',
+        });
+      }, 600);
+    }
 
     activateAdminMode(true);
   } catch (err) {
@@ -2482,12 +2543,12 @@ async function handleAdminMapClick(lat, lng) {
     createdAt: new Date().toISOString(),
   };
 
-  if (formData.photoFile) {
-    Swal.fire({ title: 'Fotoğraf yükleniyor…', didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false });
-    try { poi.photo = await uploadPoiPhoto(formData.photoFile, id); }
+  if (formData.photoFiles && formData.photoFiles.length) {
+    Swal.fire({ title: 'Fotoğraflar yükleniyor…', didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false });
+    try { poi.photos = await uploadPoiPhotos(formData.photoFiles, id); }
     catch (err) {
       Swal.close();
-      toast(`Fotoğraf yüklenemedi: ${err.message} Yer fotoğrafsız kaydedilecek.`, 'error');
+      toast(`Fotoğraflar yüklenemedi: ${err.message} Yer fotoğrafsız kaydedilecek.`, 'error');
     }
   }
   await savePoiToGithub(poi);
@@ -2517,7 +2578,7 @@ async function showPoiForm({ mode, poi = null }) {
   const cats = Object.entries(ADMIN_POI_CATEGORIES)
     .map(([key, c]) => `<option value="${key}" ${poi && poi.category === key ? 'selected' : ''}>${c.emoji || ''} ${c.label}</option>`)
     .join('');
-  const currentPhoto = poi && poi.photo ? poiPhotoUrl(poi.photo) : null;
+  const currentPhotos = (poi?.photos || (poi?.photo ? [poi.photo] : [])).slice(0, 3);
   const lbl = 'display:block;margin-bottom:3px;color:var(--c-text-muted)';
 
   const { value } = await Swal.fire({
@@ -2534,11 +2595,17 @@ async function showPoiForm({ mode, poi = null }) {
         <input id="admin-poi-phone" type="tel" class="swal2-input" placeholder="ör. 0462 123 45 67" value="${v(poi?.phone)}" style="margin:0 0 10px 0">
         <label style="${lbl}">Bağlantı <span style="opacity:.7">(Instagram / Google Maps / web sitesi)</span></label>
         <input id="admin-poi-link" type="url" class="swal2-input" placeholder="ör. instagram.com/mekan" value="${v(poi?.link)}" style="margin:0 0 10px 0">
-        <label style="${lbl}">Fotoğraf <span style="opacity:.7">(isteğe bağlı)</span></label>
-        ${currentPhoto ? `<img id="admin-poi-photo-current" src="${currentPhoto}" alt="" style="width:100%;max-height:140px;object-fit:cover;border-radius:10px;margin-bottom:6px" onerror="this.style.display='none'">` : ''}
-        <input id="admin-poi-photo" type="file" accept="image/*" class="swal2-input" style="margin:0;padding:8px;height:auto">
-        ${isEdit && poi?.photo ? `<label style="display:flex;align-items:center;gap:6px;margin-top:6px;color:var(--c-text-muted)"><input id="admin-poi-photo-remove" type="checkbox" style="width:14px;height:14px;margin:0"> Mevcut fotoğrafı kaldır</label>` : ''}
-        ${isEdit ? '' : ''}
+        <label style="${lbl}">Fotoğraflar <span style="opacity:.7">(en fazla 3, isteğe bağlı)</span></label>
+        ${currentPhotos.length ? `<div id="admin-poi-photos-current" style="display:flex;gap:6px;margin-bottom:8px">${currentPhotos.map((ph, i) => `
+          <div style="position:relative;flex:1">
+            <img src="${poiPhotoUrl(ph)}" alt="" style="width:100%;height:64px;object-fit:cover;border-radius:8px" onerror="this.style.opacity='.15'">
+            <label style="position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:5px;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;cursor:pointer">
+              <input type="checkbox" class="admin-poi-photo-remove-one" data-path="${escapeHtml(ph)}" style="width:12px;height:12px;margin:0">
+            </label>
+          </div>`).join('')}</div>
+          <p style="margin:-4px 0 8px;font-size:10.5px;color:var(--c-text-faint)">Kaldırmak için fotoğrafın üstündeki kutucuğu işaretleyin.</p>` : ''}
+        <input id="admin-poi-photo" type="file" accept="image/*" multiple class="swal2-input" style="margin:0;padding:8px;height:auto">
+        <p style="margin:4px 0 0;font-size:10.5px;color:var(--c-text-faint)">En fazla 3 fotoğraf${currentPhotos.length ? ' (mevcutlarla birlikte)' : ''}.</p>
       </div>`,
     confirmButtonText: isEdit ? 'Kaydet' : 'Kaydet', confirmButtonColor: '#10b981',
     showCancelButton: true, cancelButtonText: 'Vazgeç', cancelButtonColor: '#334155',
@@ -2550,16 +2617,21 @@ async function showPoiForm({ mode, poi = null }) {
       const description = document.getElementById('admin-poi-desc').value.trim();
       const phoneRaw = document.getElementById('admin-poi-phone').value.trim();
       const linkRaw = document.getElementById('admin-poi-link').value.trim();
-      const photoFile = document.getElementById('admin-poi-photo').files[0] || null;
-      const removePhoto = !!document.getElementById('admin-poi-photo-remove')?.checked;
+      const photoFiles = Array.from(document.getElementById('admin-poi-photo').files || []);
+      const removePaths = Array.from(document.querySelectorAll('.admin-poi-photo-remove-one:checked')).map((el) => el.dataset.path);
+      const keptCount = currentPhotos.length - removePaths.length;
+      if (keptCount + photoFiles.length > 3) {
+        Swal.showValidationMessage(`En fazla 3 fotoğraf yükleyebilirsiniz (şu an ${keptCount} fotoğraf kalacak, ${photoFiles.length} yeni seçtiniz).`);
+        return false;
+      }
 
       if (!name) { Swal.showValidationMessage('Ad alanı zorunludur.'); return false; }
       const phone = normalizePhone(phoneRaw);
       if (phoneRaw && !phone) { Swal.showValidationMessage('Telefon numarası geçerli görünmüyor.'); return false; }
       const link = normalizeUrl(linkRaw);
       if (linkRaw && !link) { Swal.showValidationMessage('Bağlantı geçerli bir web adresi olmalı.'); return false; }
-      if (photoFile && photoFile.size > 15 * 1024 * 1024) { Swal.showValidationMessage('Fotoğraf çok büyük (en fazla 15 MB).'); return false; }
-      return { category, name, description, phone, link, photoFile, removePhoto };
+      if (photoFiles.some((f) => f.size > 15 * 1024 * 1024)) { Swal.showValidationMessage('Fotoğraflardan biri çok büyük (en fazla 15 MB).'); return false; }
+      return { category, name, description, phone, link, photoFiles, removePaths };
     },
   });
   return value || null;
@@ -2578,19 +2650,22 @@ async function editPoi(id) {
     phone: f.phone || null, link: f.link || null,
   };
 
-  if (f.photoFile) {
-    Swal.fire({ title: 'Fotoğraf yükleniyor…', didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false });
-    try {
-      changes.photo = await uploadPoiPhoto(f.photoFile, id);
-      if (poi.photo) deletePoiPhoto(poi.photo); // eski fotoğrafı arka planda temizle
-    } catch (err) {
+  const existing = poi.photos || (poi.photo ? [poi.photo] : []);
+  const kept = existing.filter((ph) => !f.removePaths.includes(ph));
+  const removed = existing.filter((ph) => f.removePaths.includes(ph));
+
+  let newlyUploaded = [];
+  if (f.photoFiles && f.photoFiles.length) {
+    Swal.fire({ title: 'Fotoğraflar yükleniyor…', didOpen: () => Swal.showLoading(), showConfirmButton: false, allowOutsideClick: false });
+    try { newlyUploaded = await uploadPoiPhotos(f.photoFiles, id); }
+    catch (err) {
       Swal.close();
-      toast(`Fotoğraf yüklenemedi: ${err.message}`, 'error');
+      toast(`Fotoğraflar yüklenemedi: ${err.message}`, 'error');
     }
-  } else if (f.removePhoto && poi.photo) {
-    changes.photo = null;
-    deletePoiPhoto(poi.photo);
   }
+  changes.photos = [...kept, ...newlyUploaded];
+  if (poi.photo) changes.photo = null; // eski tekil-fotoğraf alanı varsa temizle, artık photos kullanılıyor
+  removed.forEach((ph) => deletePoiPhoto(ph)); // arka planda, kaydı bekletmeden temizle
   await updatePoiOnGithub(id, changes);
 }
 
@@ -2599,6 +2674,7 @@ window.__deletePoi = (id) => { map.closePopup(); deletePoiOnGithub(id); };
 
 /* ---------- GitHub yardımcıları (oku → değiştir → yaz) ---------- */
 const POI_PHOTO_DIR = 'poi-photos';
+const POI_MAX_PHOTOS = 3; // bir mekana yüklenebilecek en fazla fotoğraf sayısı
 
 function ghHeaders() {
   return { Authorization: `Bearer ${adminSession.token}`, Accept: 'application/vnd.github+json' };
@@ -2679,9 +2755,9 @@ function compressImageToBase64(file, maxSide = 1200, quality = 0.82) {
 }
 
 /** Sıkıştırılmış fotoğrafı repoya ayrı dosya olarak yükler, göreli yolunu döndürür. */
-async function uploadPoiPhoto(file, poiId) {
+async function uploadPoiPhoto(file, poiId, index = 0) {
   const b64 = await compressImageToBase64(file);
-  const path = `${POI_PHOTO_DIR}/${poiId}_${Date.now()}.jpg`;
+  const path = `${POI_PHOTO_DIR}/${poiId}_${Date.now()}_${index}.jpg`;
   const res = await fetchWithTimeout(ghContentsUrl(path), {
     method: 'PUT',
     headers: { ...ghHeaders(), 'Content-Type': 'application/json' },
@@ -2694,6 +2770,19 @@ async function uploadPoiPhoto(file, poiId) {
   return path;
 }
 
+/**
+ * Birden fazla fotoğrafı sırayla yükler (GitHub Contents API'de eşzamanlı yazma
+ * çakışma riski taşıdığı için sırayla ilerlenir). En fazla POI_MAX_PHOTOS kadarını dikkate alır.
+ */
+async function uploadPoiPhotos(files, poiId) {
+  const limited = files.slice(0, POI_MAX_PHOTOS);
+  const paths = [];
+  for (let i = 0; i < limited.length; i++) {
+    paths.push(await uploadPoiPhoto(limited[i], poiId, i));
+  }
+  return paths;
+}
+
 /** Repodaki fotoğraf yolunu herkese açık (anahtarsız) URL'ye çevirir. */
 function poiPhotoUrl(path) {
   const pub = adminSession || readPublicRepoInfo();
@@ -2701,6 +2790,10 @@ function poiPhotoUrl(path) {
   return `https://raw.githubusercontent.com/${encodeURIComponent(pub.owner)}/${encodeURIComponent(pub.repo)}/${encodeURIComponent(pub.branch || 'main')}/${path}`;
 }
 function readPublicRepoInfo() {
+  // 1) Koda gömülü, HERKESTE aynı olan sabit depo (asıl doğru kaynak).
+  if (PUBLISHED_POI_REPO.owner && PUBLISHED_POI_REPO.repo) return PUBLISHED_POI_REPO;
+  // 2) Geriye dönük uyumluluk: eski sürümde yöneticinin kendi tarayıcısına
+  //    yazılmış bilgi. Bu sadece o tek tarayıcıda çalışır, kalıcı çözüm değildir.
   try { return JSON.parse(localStorage.getItem(ADMIN_PUBLIC_REPO_STORAGE_KEY)); } catch (e) { return null; }
 }
 
@@ -2820,15 +2913,26 @@ const REC_ROUTE_RADIUS_M = 3000; // rotaya 3 km'ye kadar yakın olanlar "rota ü
 
 function buildRecPopupHtml(poi, cat) {
   const inRoute = state.stops.some((st) => Math.abs(st.lat - poi.lat) < 1e-6 && Math.abs(st.lng - poi.lng) < 1e-6);
-  const photoUrl = poi.photo ? poiPhotoUrl(poi.photo) : null;
+  const photos = (poi.photos || (poi.photo ? [poi.photo] : [])).slice(0, POI_MAX_PHOTOS);
   const link = normalizeUrl(poi.link);
   const phone = normalizePhone(poi.phone);
   const nearBadge = recNearRouteIds.has(poi.id)
     ? `<span class="rec-near-badge"><i class="fa-solid fa-route"></i> Rotanda</span>` : '';
 
+  const galleryHtml = photos.length ? `
+    <div class="rec-popup-gallery" data-idx="0">
+      <div class="rec-popup-gallery-track" style="width:${photos.length * 100}%">
+        ${photos.map((ph) => `<div class="rec-popup-gallery-slide"><img src="${poiPhotoUrl(ph)}" alt="" loading="lazy" onerror="this.style.opacity='0'"></div>`).join('')}
+      </div>
+      ${photos.length > 1 ? `
+        <button type="button" class="rec-gallery-nav rec-gallery-prev" onclick="window.__recGalleryNav(this,-1)" aria-label="Önceki fotoğraf"><i class="fa-solid fa-chevron-left"></i></button>
+        <button type="button" class="rec-gallery-nav rec-gallery-next" onclick="window.__recGalleryNav(this,1)" aria-label="Sonraki fotoğraf"><i class="fa-solid fa-chevron-right"></i></button>
+        <div class="rec-gallery-dots">${photos.map((_, i) => `<span class="rec-gallery-dot ${i === 0 ? 'is-active' : ''}"></span>`).join('')}</div>` : ''}
+    </div>` : '';
+
   return `
     <div class="rec-popup">
-      ${photoUrl ? `<div class="rec-popup-photo"><img src="${photoUrl}" alt="" loading="lazy" onerror="this.parentNode.style.display='none'"></div>` : ''}
+      ${galleryHtml}
       <div class="rec-popup-eyebrow">${escapeHtml(ADMIN_RECOMMENDATIONS_TITLE)} ${nearBadge}</div>
       <div class="rec-popup-row">
         <div class="rec-popup-info">
@@ -2990,6 +3094,18 @@ function showRouteRecommendations() {
  * iOS/macOS'ta Apple Maps, diğerlerinde Google Maps evrensel bağlantısı açılır;
  * başlangıç noktası boş bırakıldığı için uygulama kullanıcının anlık konumunu kullanır.
  */
+/** Popup içindeki fotoğraf galerisinde ileri/geri gider (döngüsel). */
+window.__recGalleryNav = function (btn, dir) {
+  const gallery = btn.closest('.rec-popup-gallery');
+  const track = gallery.querySelector('.rec-popup-gallery-track');
+  const dots = gallery.querySelectorAll('.rec-gallery-dot');
+  const n = dots.length;
+  let idx = (parseInt(gallery.dataset.idx, 10) + dir + n) % n;
+  gallery.dataset.idx = idx;
+  track.style.transform = `translateX(-${(100 / n) * idx}%)`;
+  dots.forEach((d, i) => d.classList.toggle('is-active', i === idx));
+};
+
 window.__openDirections = function (lat, lng) {
   const isApple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent) && 'ontouchend' in document;
   const url = isApple
